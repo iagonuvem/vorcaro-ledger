@@ -13,7 +13,7 @@ import {
 
 import {
   GENESIS_LEDGER_HASH,
-  createLedgerAppender,
+  LedgerAppender,
   openLedgerDatabase
 } from "../dist/index.js";
 
@@ -351,7 +351,7 @@ function createFixture() {
   const directory = mkdtempSync(join(tmpdir(), "vorcaro-appender-"));
   const database = openLedgerDatabase({ path: join(directory, "ledger.db") });
   seedIdentity(database);
-  const appender = createLedgerAppender({
+  const appender = LedgerAppender.create({
     database,
     serverSigningSecretKey: serverKeys.secretKey,
     now: sequentialClock("2026-07-01T14:23:12.000Z")

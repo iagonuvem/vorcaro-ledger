@@ -18,7 +18,6 @@ import {
   LocalCertificateAuthority,
   PkiError,
   PkiService,
-  hashEnrollmentToken,
   openLedgerDatabase
 } from "../dist/index.js";
 
@@ -61,7 +60,7 @@ test("enrollment stores only token hash, verifies device proof, issues cert, and
       .prepare("SELECT event_type, status, server_sequence FROM ledger_events WHERE id = ?")
       .get("evt_device_enrolled");
 
-    assert.equal(tokenRow.token_hash, hashEnrollmentToken("one-time-token"));
+    assert.equal(tokenRow.token_hash, PkiService.hashEnrollmentToken("one-time-token"));
     assert.equal(result.certificate.certificateFingerprint.length, 64);
     assert.equal(verifyServerAckSignature(result.acknowledgement, serverKeys.publicKey), true);
     assert.equal(device.id, "dev_new");

@@ -75,6 +75,10 @@ export class LedgerAppender {
   private readonly now: () => string;
   private tail: Promise<void> = Promise.resolve();
 
+  static create(options: LedgerAppenderOptions): LedgerAppender {
+    return new LedgerAppender(options);
+  }
+
   constructor(options: LedgerAppenderOptions) {
     this.database = options.database;
     this.serverSigningSecretKey = options.serverSigningSecretKey;
@@ -97,7 +101,7 @@ export class LedgerAppender {
         return deviceOrder;
       }
 
-      return compareBigInt(left.event.device_event_counter, right.event.device_event_counter);
+      return LedgerAppender.compareBigInt(left.event.device_event_counter, right.event.device_event_counter);
     });
     const acknowledgements: ServerAck[] = [];
 
@@ -113,7 +117,7 @@ export class LedgerAppender {
     const existing = this.findExistingEvent(event.event_id);
 
     if (existing !== undefined) {
-      return rowToAck(existing);
+      return LedgerAppender.rowToAck(existing);
     }
 
     const device = this.findDeviceExecutive(event.device_id);
@@ -269,7 +273,11 @@ export class LedgerAppender {
         ORDER BY key_version DESC
         LIMIT 1`
       )
-      .get(executiveId, toSqlInteger(baseServerSequence), toSqlInteger(baseServerSequence)) as
+      .get(
+        executiveId,
+        LedgerAppender.toSqlInteger(baseServerSequence),
+        LedgerAppender.toSqlInteger(baseServerSequence)
+      ) as
       | ExecutiveKeyRow
       | undefined;
   }
@@ -349,11 +357,11 @@ export class LedgerAppender {
         input.event.event_type,
         input.event.actor_id,
         input.event.device_id,
-        toSqlInteger(input.event.device_event_counter),
-        toSqlInteger(input.event.base_server_sequence),
+        LedgerAppender.toSqlInteger(input.event.device_event_counter),
+        LedgerAppender.toSqlInteger(input.event.base_server_sequence),
         input.event.object_type,
         input.event.object_id,
-        stringifyPolicyMetadata(input.event.policy_metadata),
+        LedgerAppender.stringifyPolicyMetadata(input.event.policy_metadata),
         Buffer.from(input.event.encrypted_payload, "base64"),
         input.event.payload_hash,
         input.previousLedgerHash,
@@ -375,7 +383,7 @@ export class LedgerAppender {
         SET max_event_counter = ?, last_seen_at = ?
         WHERE id = ?`
       )
-      .run(toSqlInteger(deviceEventCounter), lastSeenAt, deviceId);
+      .run(LedgerAppender.toSqlInteger(deviceEventCounter), lastSeenAt, deviceId);
   }
 
   private updateObjectHead(event: ClientEventEnvelope, serverSequence: number, status: EventStatus): void {
@@ -433,7 +441,7 @@ export class LedgerAppender {
   private openConflict(event: ClientEventEnvelope, serverSequence: number, serverTimestamp: string): void {
     const objectHead = this.findObjectHead(event.object_type, event.object_id);
     const existingConflict = this.findOpenConflict(event.object_type, event.object_id);
-    const eventIds = existingConflict === undefined ? [] : parseConflictEventIds(existingConflict.event_ids);
+    const eventIds = existingConflict === undefined ? [] : LedgerAppender.parseConflictEventIds(existingConflict.event_ids);
     const headEventId = objectHead === undefined ? undefined : this.findHeadEventId(objectHead.head_sequence);
 
     if (headEventId !== undefined && !eventIds.includes(headEventId)) {
@@ -459,7 +467,7 @@ export class LedgerAppender {
         ) VALUES (?, ?, ?, ?, ?, 'open', NULL, NULL, ?, NULL)`
       )
       .run(
-        conflictId(event.object_type, event.object_id, serverSequence),
+        LedgerAppender.conflictId(event.object_type, event.object_id, serverSequence),
         event.object_type,
         event.object_id,
         JSON.stringify(eventIds),
@@ -485,57 +493,53 @@ export class LedgerAppender {
       )
       .run(event.event_id, serverTimestamp, existingConflict.id);
   }
-}
 
-export function createLedgerAppender(options: LedgerAppenderOptions): LedgerAppender {
-  return new LedgerAppender(options);
-}
-
-function rowToAck(row: ExistingEventRow): ServerAck {
-  return {
-    event_id: row.id,
-    status: row.status,
-    server_sequence: row.server_sequence === null ? null : BigInt(row.server_sequence),
-    resulting_ledger_hash: row.resulting_ledger_hash,
-    server_timestamp: row.server_timestamp,
-    error_code: row.error_code,
-    server_signature: row.server_signature
-  };
-}
-
-function compareBigInt(left: bigint, right: bigint): number {
-  if (left < right) {
-    return -1;
+  static rowToAck(row: ExistingEventRow): ServerAck {
+    return {
+      event_id: row.id,
+      status: row.status,
+      server_sequence: row.server_sequence === null ? null : BigInt(row.server_sequence),
+      resulting_ledger_hash: row.resulting_ledger_hash,
+      server_timestamp: row.server_timestamp,
+      error_code: row.error_code,
+      server_signature: row.server_signature
+    };
   }
 
-  if (left > right) {
-    return 1;
+  static compareBigInt(left: bigint, right: bigint): number {
+    if (left < right) {
+      return -1;
+    }
+
+    if (left > right) {
+      return 1;
+    }
+
+    return 0;
   }
 
-  return 0;
-}
-
-function stringifyPolicyMetadata(policyMetadata: ClientEventEnvelope["policy_metadata"]): string {
-  return JSON.stringify(policyMetadata, (_key, value: unknown) =>
-    typeof value === "bigint" ? value.toString(10) : value
-  );
-}
-
-function parseConflictEventIds(raw: string): string[] {
-  const parsed = JSON.parse(raw) as unknown;
-  return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
-}
-
-function conflictId(objectType: string, objectId: string, detectedAtSequence: number): string {
-  return `cfl_${sha256Hex(`${objectType}:${objectId}:${detectedAtSequence}`).slice(0, 26)}`;
-}
-
-function toSqlInteger(value: bigint): number {
-  const asNumber = Number(value);
-
-  if (!Number.isSafeInteger(asNumber)) {
-    throw new RangeError("SQLite integer value exceeds JavaScript safe integer range");
+  static stringifyPolicyMetadata(policyMetadata: ClientEventEnvelope["policy_metadata"]): string {
+    return JSON.stringify(policyMetadata, (_key, value: unknown) =>
+      typeof value === "bigint" ? value.toString(10) : value
+    );
   }
 
-  return asNumber;
+  static parseConflictEventIds(raw: string): string[] {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  }
+
+  static conflictId(objectType: string, objectId: string, detectedAtSequence: number): string {
+    return `cfl_${sha256Hex(`${objectType}:${objectId}:${detectedAtSequence}`).slice(0, 26)}`;
+  }
+
+  static toSqlInteger(value: bigint): number {
+    const asNumber = Number(value);
+
+    if (!Number.isSafeInteger(asNumber)) {
+      throw new RangeError("SQLite integer value exceeds JavaScript safe integer range");
+    }
+
+    return asNumber;
+  }
 }

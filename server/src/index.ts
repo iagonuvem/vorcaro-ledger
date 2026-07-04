@@ -11,7 +11,6 @@ export {
 export {
   GENESIS_LEDGER_HASH,
   LedgerAppender,
-  createLedgerAppender,
   type AppendEventRequest,
   type LedgerAppenderOptions
 } from "./ledger/appender.js";
@@ -26,7 +25,6 @@ export { LocalCertificateAuthority, type CertificateAuthority } from "./pki/auth
 export {
   PkiError,
   PkiService,
-  hashEnrollmentToken,
   type BeginEnrollmentInput,
   type CompleteEnrollmentInput,
   type CompleteEnrollmentResult,
@@ -38,14 +36,12 @@ export {
 } from "./pki/enrollment.js";
 export {
   ProjectionWorker,
-  createProjectionWorker,
   type ProjectionRunResult,
   type ProjectionWorkerOptions
 } from "./projections/worker.js";
 export {
   MemorySnapshotObjectStore,
   SnapshotWorker,
-  createSnapshotWorker,
   type SnapshotObjectStore,
   type SnapshotWorkerOptions
 } from "./snapshots/worker.js";
@@ -56,10 +52,12 @@ export type ServerBootstrapStatus = {
   protocol_error_code_count: number;
 };
 
-export function getServerBootstrapStatus(): ServerBootstrapStatus {
-  return {
-    protocol_event_type_count: eventTypes.length,
-    protocol_object_type_count: objectTypes.length,
-    protocol_error_code_count: errorCodes.length
-  };
+export class ServerBootstrap {
+  static getStatus(): ServerBootstrapStatus {
+    return {
+      protocol_event_type_count: eventTypes.length,
+      protocol_object_type_count: objectTypes.length,
+      protocol_error_code_count: errorCodes.length
+    };
+  }
 }

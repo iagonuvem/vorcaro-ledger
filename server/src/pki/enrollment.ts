@@ -134,9 +134,13 @@ export class PkiService {
     this.enrollmentChallengeLifetimeMinutes = options.enrollmentChallengeLifetimeMinutes ?? 10;
   }
 
+  static hashEnrollmentToken(token: string): string {
+    return sha256Digest(token);
+  }
+
   issueEnrollmentToken(input: IssueEnrollmentTokenInput): IssuedEnrollmentToken {
     const token = input.token ?? randomBytes(32).toString("base64url");
-    const tokenHash = hashEnrollmentToken(token);
+    const tokenHash = PkiService.hashEnrollmentToken(token);
 
     this.database
       .prepare(
@@ -165,12 +169,12 @@ export class PkiService {
   }
 
   beginEnrollment(input: BeginEnrollmentInput): EnrollmentChallenge {
-    const tokenHash = hashEnrollmentToken(input.token);
+    const tokenHash = PkiService.hashEnrollmentToken(input.token);
     const now = this.now();
     const token = this.getUsableToken(tokenHash, now);
     const challengeId = `enr_${randomUUID()}`;
     const challenge = randomBytes(32).toString("base64url");
-    const expiresAt = addMinutes(now, this.enrollmentChallengeLifetimeMinutes);
+    const expiresAt = PkiService.addMinutes(now, this.enrollmentChallengeLifetimeMinutes);
 
     this.database
       .prepare(
@@ -211,7 +215,7 @@ export class PkiService {
   completeEnrollment(input: CompleteEnrollmentInput): CompleteEnrollmentResult {
     const event = clientEventEnvelopeSchema.parse(input.enrollmentEvent);
     const now = this.now();
-    const tokenHash = hashEnrollmentToken(input.token);
+    const tokenHash = PkiService.hashEnrollmentToken(input.token);
     const challenge = this.getUsableChallenge(input.challengeId, tokenHash, now);
 
     this.assertEnrollmentEventMatchesChallenge(event, challenge);
@@ -228,7 +232,7 @@ export class PkiService {
         publicKey: challenge.public_key,
         challengeId: challenge.id,
         issuedAt: now,
-        expiresAt: addDays(now, this.deviceCertificateLifetimeDays)
+        expiresAt: PkiService.addDays(now, this.deviceCertificateLifetimeDays)
       });
       const acknowledgement = this.appendEnrollmentEvent({
         event,
@@ -347,7 +351,7 @@ export class PkiService {
         input.hardwareBacked ? 1 : 0,
         input.serverTimestamp,
         input.serverTimestamp,
-        toSqlInteger(input.event.device_event_counter)
+        PkiService.toSqlInteger(input.event.device_event_counter)
       );
 
     this.database
@@ -366,11 +370,11 @@ export class PkiService {
         input.event.event_type,
         input.event.actor_id,
         input.event.device_id,
-        toSqlInteger(input.event.device_event_counter),
-        toSqlInteger(input.event.base_server_sequence),
+        PkiService.toSqlInteger(input.event.device_event_counter),
+        PkiService.toSqlInteger(input.event.base_server_sequence),
         input.event.object_type,
         input.event.object_id,
-        stringifyPolicyMetadata(input.event.policy_metadata),
+        PkiService.stringifyPolicyMetadata(input.event.policy_metadata),
         Buffer.from(input.event.encrypted_payload, "base64"),
         input.event.payload_hash,
         previousLedgerHash,
@@ -408,7 +412,7 @@ export class PkiService {
       throw new PkiError("CERT_UNKNOWN");
     }
 
-    if (token.consumed_at !== null || isExpired(token.expires_at, now)) {
+    if (token.consumed_at !== null || PkiService.isExpired(token.expires_at, now)) {
       throw new PkiError("POLICY_DENIED");
     }
 
@@ -430,7 +434,7 @@ export class PkiService {
       throw new PkiError("CERT_UNKNOWN");
     }
 
-    if (challenge.consumed_at !== null || isExpired(challenge.expires_at, now)) {
+    if (challenge.consumed_at !== null || PkiService.isExpired(challenge.expires_at, now)) {
       throw new PkiError("POLICY_DENIED");
     }
 
@@ -475,8 +479,8 @@ export class PkiService {
       )
       .get(
         event.actor_id,
-        toSqlInteger(event.base_server_sequence),
-        toSqlInteger(event.base_server_sequence)
+        PkiService.toSqlInteger(event.base_server_sequence),
+        PkiService.toSqlInteger(event.base_server_sequence)
       ) as ExecutiveKeyRow | undefined;
 
     if (key === undefined || !verifyClientEventSignature(event, key.signing_public_key)) {
@@ -548,6 +552,34 @@ export class PkiService {
 
     return row?.resulting_ledger_hash ?? GENESIS_LEDGER_HASH;
   }
+
+  static addMinutes(isoTimestamp: string, minutes: number): string {
+    return new Date(Date.parse(isoTimestamp) + minutes * 60_000).toISOString();
+  }
+
+  static addDays(isoTimestamp: string, days: number): string {
+    return new Date(Date.parse(isoTimestamp) + days * 24 * 60 * 60_000).toISOString();
+  }
+
+  static isExpired(expiresAt: string, now: string): boolean {
+    return Date.parse(expiresAt) <= Date.parse(now);
+  }
+
+  static stringifyPolicyMetadata(policyMetadata: ClientEventEnvelope["policy_metadata"]): string {
+    return JSON.stringify(policyMetadata, (_key, value: unknown) =>
+      typeof value === "bigint" ? value.toString(10) : value
+    );
+  }
+
+  static toSqlInteger(value: bigint): number {
+    const asNumber = Number(value);
+
+    if (!Number.isSafeInteger(asNumber)) {
+      throw new RangeError("SQLite integer value exceeds JavaScript safe integer range");
+    }
+
+    return asNumber;
+  }
 }
 
 export class PkiError extends Error {
@@ -557,36 +589,4 @@ export class PkiError extends Error {
     super(errorCode);
     this.errorCode = errorCode;
   }
-}
-
-export function hashEnrollmentToken(token: string): string {
-  return sha256Digest(token);
-}
-
-function addMinutes(isoTimestamp: string, minutes: number): string {
-  return new Date(Date.parse(isoTimestamp) + minutes * 60_000).toISOString();
-}
-
-function addDays(isoTimestamp: string, days: number): string {
-  return new Date(Date.parse(isoTimestamp) + days * 24 * 60 * 60_000).toISOString();
-}
-
-function isExpired(expiresAt: string, now: string): boolean {
-  return Date.parse(expiresAt) <= Date.parse(now);
-}
-
-function stringifyPolicyMetadata(policyMetadata: ClientEventEnvelope["policy_metadata"]): string {
-  return JSON.stringify(policyMetadata, (_key, value: unknown) =>
-    typeof value === "bigint" ? value.toString(10) : value
-  );
-}
-
-function toSqlInteger(value: bigint): number {
-  const asNumber = Number(value);
-
-  if (!Number.isSafeInteger(asNumber)) {
-    throw new RangeError("SQLite integer value exceeds JavaScript safe integer range");
-  }
-
-  return asNumber;
 }

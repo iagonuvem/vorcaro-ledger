@@ -14,10 +14,10 @@ import {
 } from "@vorcaro/protocol";
 
 import {
+  LedgerAppender,
   MemorySnapshotObjectStore,
-  createLedgerAppender,
-  createProjectionWorker,
-  createSnapshotWorker,
+  ProjectionWorker,
+  SnapshotWorker,
   openLedgerDatabase,
   openProjectionsDatabase
 } from "../dist/index.js";
@@ -44,7 +44,7 @@ test("projection worker applies ledger events idempotently and mirrors open conf
       certificateFingerprint: "fingerprint-2"
     });
 
-    const worker = createProjectionWorker({ ledgerDatabase, projectionsDatabase });
+    const worker = ProjectionWorker.create({ ledgerDatabase, projectionsDatabase });
     const firstRun = worker.applyNextBatch();
     const repeatedRun = worker.applyNextBatch();
     const account = projectionsDatabase
@@ -113,10 +113,10 @@ test("snapshot worker stores encrypted compact state and writes a signed manifes
       event: makeEvent({ eventId: "evt_snapshot_account", counter: 1n, objectId: "acct_snapshot" }),
       certificateFingerprint: "fingerprint-1"
     });
-    createProjectionWorker({ ledgerDatabase, projectionsDatabase }).applyNextBatch();
+    ProjectionWorker.create({ ledgerDatabase, projectionsDatabase }).applyNextBatch();
 
     const objectStore = new MemorySnapshotObjectStore();
-    const snapshotWorker = createSnapshotWorker({
+    const snapshotWorker = SnapshotWorker.create({
       ledgerDatabase,
       projectionsDatabase,
       objectStore,
@@ -160,7 +160,7 @@ function createFixture() {
   const ledgerDatabase = openLedgerDatabase({ path: join(directory, "ledger.db") });
   const projectionsDatabase = openProjectionsDatabase({ path: join(directory, "projections.db") });
   seedIdentity(ledgerDatabase);
-  const appender = createLedgerAppender({
+  const appender = LedgerAppender.create({
     database: ledgerDatabase,
     serverSigningSecretKey: serverKeys.secretKey,
     now: sequentialClock("2026-07-01T14:23:12.000Z")

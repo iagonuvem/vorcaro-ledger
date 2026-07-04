@@ -41,6 +41,10 @@ export class ProjectionWorker {
   private readonly ledgerDatabase: DatabaseSync;
   private readonly projectionsDatabase: DatabaseSync;
 
+  static create(options: ProjectionWorkerOptions): ProjectionWorker {
+    return new ProjectionWorker(options);
+  }
+
   constructor(options: ProjectionWorkerOptions) {
     this.ledgerDatabase = options.ledgerDatabase;
     this.projectionsDatabase = options.projectionsDatabase;
@@ -136,7 +140,7 @@ export class ProjectionWorker {
   }
 
   private upsertAccount(event: LedgerEventRow): void {
-    const metadata = parsePolicyMetadata(event.policy_metadata);
+    const metadata = ProjectionWorker.parsePolicyMetadata(event.policy_metadata);
     const accountId = metadata.account_id ?? event.object_id;
     const entityId = metadata.entity_id ?? "unknown";
     const currency = metadata.currency ?? "USD";
@@ -282,35 +286,31 @@ export class ProjectionWorker {
       )
       .run(key, value);
   }
-}
 
-export function createProjectionWorker(options: ProjectionWorkerOptions): ProjectionWorker {
-  return new ProjectionWorker(options);
-}
-
-function parsePolicyMetadata(raw: string): {
-  account_id?: string;
-  entity_id?: string;
-  currency?: string;
-} {
-  const parsed = JSON.parse(raw) as Record<string, unknown>;
-  const metadata: {
+  static parsePolicyMetadata(raw: string): {
     account_id?: string;
     entity_id?: string;
     currency?: string;
-  } = {};
+  } {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const metadata: {
+      account_id?: string;
+      entity_id?: string;
+      currency?: string;
+    } = {};
 
-  if (typeof parsed.account_id === "string") {
-    metadata.account_id = parsed.account_id;
+    if (typeof parsed.account_id === "string") {
+      metadata.account_id = parsed.account_id;
+    }
+
+    if (typeof parsed.entity_id === "string") {
+      metadata.entity_id = parsed.entity_id;
+    }
+
+    if (typeof parsed.currency === "string") {
+      metadata.currency = parsed.currency;
+    }
+
+    return metadata;
   }
-
-  if (typeof parsed.entity_id === "string") {
-    metadata.entity_id = parsed.entity_id;
-  }
-
-  if (typeof parsed.currency === "string") {
-    metadata.currency = parsed.currency;
-  }
-
-  return metadata;
 }

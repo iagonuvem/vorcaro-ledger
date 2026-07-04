@@ -82,6 +82,10 @@ export class SnapshotWorker {
   private readonly snapshotEncryptionKey: Buffer;
   private readonly now: () => string;
 
+  static create(options: SnapshotWorkerOptions): SnapshotWorker {
+    return new SnapshotWorker(options);
+  }
+
   constructor(options: SnapshotWorkerOptions) {
     if (options.snapshotEncryptionKey.length !== 32) {
       throw new TypeError("Snapshot encryption key must be 32 bytes");
@@ -97,7 +101,7 @@ export class SnapshotWorker {
 
   createSnapshot(): LedgerSnapshot {
     const body = this.buildSnapshotBody();
-    const encrypted = encryptSnapshotBody(
+    const encrypted = SnapshotWorker.encryptSnapshotBody(
       canonicalBytes(body),
       this.snapshotEncryptionKey
     );
@@ -129,7 +133,7 @@ export class SnapshotWorker {
       )
       .run(
         snapshot.id,
-        toSqlInteger(snapshot.up_to_sequence),
+        SnapshotWorker.toSqlInteger(snapshot.up_to_sequence),
         snapshot.content_hash,
         snapshot.storage_ref,
         snapshot.signature,
@@ -235,33 +239,29 @@ export class SnapshotWorker {
       detected_at_sequence: row.detected_at_sequence
     }));
   }
-}
 
-export function createSnapshotWorker(options: SnapshotWorkerOptions): SnapshotWorker {
-  return new SnapshotWorker(options);
-}
+  static encryptSnapshotBody(plaintext: Buffer, key: Buffer): Buffer {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    const envelope = {
+      algorithm: "AES-256-GCM",
+      iv: iv.toString("base64"),
+      auth_tag: authTag.toString("base64"),
+      ciphertext: ciphertext.toString("base64")
+    };
 
-function encryptSnapshotBody(plaintext: Buffer, key: Buffer): Buffer {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-  const envelope = {
-    algorithm: "AES-256-GCM",
-    iv: iv.toString("base64"),
-    auth_tag: authTag.toString("base64"),
-    ciphertext: ciphertext.toString("base64")
-  };
-
-  return canonicalBytes(envelope);
-}
-
-function toSqlInteger(value: bigint): number {
-  const asNumber = Number(value);
-
-  if (!Number.isSafeInteger(asNumber)) {
-    throw new RangeError("SQLite integer value exceeds JavaScript safe integer range");
+    return canonicalBytes(envelope);
   }
 
-  return asNumber;
+  static toSqlInteger(value: bigint): number {
+    const asNumber = Number(value);
+
+    if (!Number.isSafeInteger(asNumber)) {
+      throw new RangeError("SQLite integer value exceeds JavaScript safe integer range");
+    }
+
+    return asNumber;
+  }
 }

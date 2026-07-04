@@ -16,7 +16,7 @@ import {
   buildMtlsServerOptions,
   createAdminApiApp,
   createDeviceApiApp,
-  createLedgerAppender,
+  LedgerAppender,
   openLedgerDatabase
 } from "../dist/index.js";
 import { ApiError } from "../dist/api/errors.js";
@@ -135,7 +135,7 @@ test("device and admin apps are hardened Express apps without version banners", 
   const { database, cleanup } = createDatabaseFixture();
 
   try {
-    const appender = createLedgerAppender({
+    const appender = LedgerAppender.create({
       database,
       serverSigningSecretKey: serverKeys.secretKey,
       now: () => "2026-07-01T15:00:00.000Z"

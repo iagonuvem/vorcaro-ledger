@@ -14,7 +14,7 @@ import {
 
 import type { LedgerAppender } from "../ledger/appender.js";
 import { GENESIS_LEDGER_HASH } from "../ledger/appender.js";
-import { ApiError, errorStatus } from "./errors.js";
+import { ApiError } from "./errors.js";
 import { PkiError, type PkiService } from "../pki/enrollment.js";
 import {
   createIdentityMiddleware,
@@ -279,12 +279,12 @@ export function createErrorHandler(): ErrorRequestHandler {
     }
 
     if (error instanceof PkiError) {
-      sendJson(response, errorStatus(error.errorCode), { error_code: error.errorCode });
+      sendJson(response, ApiError.errorStatus(error.errorCode), { error_code: error.errorCode });
       return;
     }
 
     if (error instanceof ZodError || isJsonParseError(error)) {
-      sendJson(response, errorStatus("SCHEMA_INVALID"), { error_code: "SCHEMA_INVALID" });
+      sendJson(response, ApiError.errorStatus("SCHEMA_INVALID"), { error_code: "SCHEMA_INVALID" });
       return;
     }
 
