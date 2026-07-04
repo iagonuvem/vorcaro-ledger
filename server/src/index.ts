@@ -15,6 +15,13 @@ export {
   type AppendEventRequest,
   type LedgerAppenderOptions
 } from "./ledger/appender.js";
+export { createAdminApiApp } from "./api/admin-api.js";
+export { createDeviceApiApp, createErrorHandler, type DeviceApiOptions } from "./api/device-api.js";
+export {
+  buildMtlsServerOptions,
+  createMtlsHttpsServer,
+  type MtlsServerOptions
+} from "./api/listeners.js";
 
 export type ServerBootstrapStatus = {
   protocol_event_type_count: number;
