@@ -10,6 +10,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Step 3a, Network interface and API surface (§7): completed for the initial executable baseline.
 - Step 4a, PKI enrollment and revocation baseline (§8): completed for the local executable baseline.
 - Step 5a, Conflict detection and resolution (§9): completed for the initial executable baseline.
+- Step 6a, Snapshots and projections (§10): completed for the initial executable baseline.
 - Server app: bootstrapped as the `server` workspace package; device/admin Express apps, mTLS listener factory, PKI service boundary, local CA adapter, enrollment, and revocation-list handling exist. Real `step-ca` deployment wiring remains a later operational integration.
 
 ## Completed
@@ -46,6 +47,11 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Added mutable `conflicts` working table in `ledger.db` for open/resolved conflict materialization while keeping conflict truth in append-only ledger events.
 - Extended `LedgerAppender` conflict behavior so stale-object events create/update an open conflict record with permanent event ids, conflicted objects reject further writes with `POLICY_DENIED`, and only an accepted signed `CONFLICT_RESOLVED` event clears `object_heads.conflicted`, records `resolution_event_id`, and establishes the new head.
 - Added conflict tests covering durable open-conflict records, event-id retention, write blocking while conflicted, successful signed resolution, and closed-code rejection for resolution attempts without an open conflict.
+- Added `ProjectionWorker` for `projections.db`, keyed by `proj_meta.last_applied_sequence`, with idempotent batch application, full rebuild support, account projection materialization, cash-position aggregation, and open-conflict projection sync from the ledger `conflicts` table.
+- Added `SnapshotWorker` that folds projection state and ledger head into canonical compact snapshot bytes, encrypts the body with AES-256-GCM, stores it through an object-store adapter, and writes a signed append-only manifest to `snapshots`.
+- Added `MemorySnapshotObjectStore` for local tests; production MinIO wiring can implement the same object-store boundary without changing snapshot manifest semantics.
+- Exported projection and snapshot workers from the server package.
+- Added section §10 tests covering projection idempotency, open-conflict mirroring, conflict-resolution projection cleanup, encrypted snapshot object storage, signed snapshot manifests, content-hash verification, and same-sequence snapshot id uniqueness.
 
 ## Verification
 
@@ -56,7 +62,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 ## Not Started
 
 - Real `step-ca` client integration and certificate renewal endpoint.
-- Checkpoints worker, snapshots, KMS, recovery, full policy engine, conflict projection worker, admin console implementation, and server-side AI workers.
+- Checkpoints worker, production MinIO adapter, KMS-wrapped snapshot/database keys, recovery, full policy engine, broader finance projection event coverage, reporting APIs, admin console implementation, and server-side AI workers.
 
 ## Notes
 
@@ -67,3 +73,5 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - The §7 API tests avoid opening local sockets because this sandbox blocks `listen`; mTLS listener hardening is verified through the exported server option builder, while identity middleware is tested directly with an injected fingerprint resolver. Production defaults still read the peer certificate from the TLS socket.
 - The §8 CA adapter is intentionally local/test-only in this baseline. It preserves the server contract without introducing live CA network calls; production `step-ca` integration must implement the same `CertificateAuthority` interface.
 - The §9 implementation blocks all new ledger writes to a conflicted object until `CONFLICT_RESOLVED` lands. The later full policy engine can narrow this to the plan's material-action rule when read/annotation event types exist.
+- The §10 snapshot worker currently accepts a 32-byte snapshot encryption key directly. Later KMS work must unwrap/provide that key from the HSM boundary; snapshot bodies are already encrypted before leaving process memory for object storage.
+- The §10 projection worker covers account, cash-position, and conflict read models needed by the current implemented event surface. Transaction, budget, approval, and richer account fields should be filled when the corresponding decrypted payload schemas and policy/KMS path exist.

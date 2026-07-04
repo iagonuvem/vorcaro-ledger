@@ -36,6 +36,19 @@ export {
   type PkiServiceOptions,
   type RevokeDeviceInput
 } from "./pki/enrollment.js";
+export {
+  ProjectionWorker,
+  createProjectionWorker,
+  type ProjectionRunResult,
+  type ProjectionWorkerOptions
+} from "./projections/worker.js";
+export {
+  MemorySnapshotObjectStore,
+  SnapshotWorker,
+  createSnapshotWorker,
+  type SnapshotObjectStore,
+  type SnapshotWorkerOptions
+} from "./snapshots/worker.js";
 
 export type ServerBootstrapStatus = {
   protocol_event_type_count: number;
