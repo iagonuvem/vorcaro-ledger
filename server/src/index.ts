@@ -1,5 +1,14 @@
 import { errorCodes, eventTypes, objectTypes } from "@vorcaro/protocol";
 
+export {
+  configureConnection,
+  configureReadOnlyConnection,
+  initializeLedgerDatabase,
+  initializeProjectionsDatabase,
+  openLedgerDatabase,
+  openProjectionsDatabase
+} from "./db/sqlite.js";
+
 export type ServerBootstrapStatus = {
   protocol_event_type_count: number;
   protocol_object_type_count: number;
