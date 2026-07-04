@@ -1,0 +1,17 @@
+{
+  "name": "vorcaro-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vorcaro Enterprises Sovereign Finance Ledger — local-first, encrypted, offline-capable finance operations platform.",
+  "license": "GPL-3.0-only",
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint"
+  }
+}
