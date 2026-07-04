@@ -8,6 +8,13 @@ export {
   openLedgerDatabase,
   openProjectionsDatabase
 } from "./db/sqlite.js";
+export {
+  GENESIS_LEDGER_HASH,
+  LedgerAppender,
+  createLedgerAppender,
+  type AppendEventRequest,
+  type LedgerAppenderOptions
+} from "./ledger/appender.js";
 
 export type ServerBootstrapStatus = {
   protocol_event_type_count: number;

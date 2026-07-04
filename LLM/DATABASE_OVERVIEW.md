@@ -142,6 +142,13 @@ CREATE TABLE ledger_events (
   server_signature      TEXT,
   status                TEXT NOT NULL CHECK (status IN
                           ('pending','accepted','rejected','conflicted','quarantined')),
+  error_code            TEXT CHECK (error_code IN
+                          ('CERT_REVOKED','CERT_UNKNOWN','EXECUTIVE_INACTIVE',
+                           'REPLAY_COUNTER','DUPLICATE_EVENT','BAD_SIGNATURE',
+                           'BAD_PAYLOAD_HASH','SCHEMA_INVALID','STALE_BASE',
+                           'CONFLICT','POLICY_DENIED','APPROVALS_REQUIRED',
+                           'UNKNOWN_ACCOUNT','ACCOUNT_CLOSED',
+                           'POLICY_VERSION_MISMATCH')),
   client_timestamp      TEXT NOT NULL,          -- recorded, never trusted for policy
   server_timestamp      TEXT NOT NULL,          -- authoritative (set by appender, UTC)
   accepted_at           TEXT,

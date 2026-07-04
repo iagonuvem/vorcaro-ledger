@@ -204,7 +204,7 @@ function seedLedgerRows(database) {
       id, server_sequence, event_type, actor_id, device_id, device_event_counter,
       base_server_sequence, object_type, object_id, policy_metadata,
       encrypted_payload, payload_hash, previous_ledger_hash, resulting_ledger_hash,
-      client_signature, server_signature, status, client_timestamp, server_timestamp, accepted_at
+      client_signature, server_signature, status, error_code, client_timestamp, server_timestamp, accepted_at
     ) VALUES (
       'evt_01JTEST0000000000000000000',
       1,
@@ -223,6 +223,7 @@ function seedLedgerRows(database) {
       'client-signature',
       'server-signature',
       'accepted',
+      NULL,
       '2026-07-01T14:23:11Z',
       '2026-07-01T14:23:12Z',
       '2026-07-01T14:23:12Z'

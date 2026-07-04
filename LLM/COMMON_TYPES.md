@@ -104,6 +104,7 @@ type LedgerEvent = ClientEventEnvelope & {
   resulting_ledger_hash: string | null;
   server_signature: string | null;
   status: EventStatus;
+  error_code: ErrorCode | null;    // persisted outcome for idempotent acknowledgements
   server_timestamp: string;        // authoritative for policy and audit
   accepted_at: string | null;
 };

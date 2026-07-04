@@ -160,6 +160,7 @@ export const ledgerEventSchema = clientEventEnvelopeSchema
     resulting_ledger_hash: hashSchema.nullable(),
     server_signature: base64Schema.nullable(),
     status: eventStatusSchema,
+    error_code: errorCodeSchema.nullable(),
     server_timestamp: isoUtcTimestampSchema,
     accepted_at: isoUtcTimestampSchema.nullable()
   })

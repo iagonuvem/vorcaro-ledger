@@ -75,6 +75,13 @@ CREATE TABLE IF NOT EXISTS ledger_events (
   client_signature      TEXT NOT NULL,
   server_signature      TEXT,
   status                TEXT NOT NULL CHECK (status IN ('pending','accepted','rejected','conflicted','quarantined')),
+  error_code            TEXT CHECK (error_code IN (
+    'CERT_REVOKED','CERT_UNKNOWN','EXECUTIVE_INACTIVE',
+    'REPLAY_COUNTER','DUPLICATE_EVENT','BAD_SIGNATURE',
+    'BAD_PAYLOAD_HASH','SCHEMA_INVALID','STALE_BASE',
+    'CONFLICT','POLICY_DENIED','APPROVALS_REQUIRED',
+    'UNKNOWN_ACCOUNT','ACCOUNT_CLOSED','POLICY_VERSION_MISMATCH'
+  )),
   client_timestamp      TEXT NOT NULL,
   server_timestamp      TEXT NOT NULL,
   accepted_at           TEXT,
