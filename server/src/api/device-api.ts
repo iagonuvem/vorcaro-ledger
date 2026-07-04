@@ -15,6 +15,7 @@ import {
 import type { LedgerAppender } from "../ledger/appender.js";
 import { GENESIS_LEDGER_HASH } from "../ledger/appender.js";
 import { ApiError, errorStatus } from "./errors.js";
+import { PkiError, type PkiService } from "../pki/enrollment.js";
 import {
   createIdentityMiddleware,
   requireIdentity,
@@ -29,6 +30,7 @@ export type DeviceApiOptions = {
   readonly database: DatabaseSync;
   readonly appender: LedgerAppender;
   readonly serverSigningSecretKey: string;
+  readonly pkiService?: PkiService;
   readonly now?: () => string;
   readonly certificateFingerprintResolver?: CertificateFingerprintResolver;
 };
@@ -40,6 +42,22 @@ const eventBatchSchema = z
   .strict();
 
 const nonNegativeIntegerParam = z.coerce.bigint().nonnegative();
+const beginEnrollmentBodySchema = z
+  .object({
+    token: z.string().min(1),
+    device_id: z.string().min(1),
+    public_key: z.string().min(1)
+  })
+  .strict();
+const completeEnrollmentBodySchema = z
+  .object({
+    token: z.string().min(1),
+    challenge_id: z.string().min(1),
+    proof_signature: z.string().min(1),
+    hardware_backed: z.boolean(),
+    enrollment_event: z.unknown()
+  })
+  .strict();
 
 export function createDeviceApiApp(options: DeviceApiOptions): express.Express {
   const now = options.now ?? (() => new Date().toISOString());
@@ -72,12 +90,53 @@ export function createDeviceApiApp(options: DeviceApiOptions): express.Express {
     })
   );
 
-  app.post("/v1/enroll/begin", (_request, response) => {
-    sendJson(response, 501, { error_code: "POLICY_DENIED" });
+  app.post("/v1/enroll/begin", (request, response) => {
+    if (options.pkiService === undefined) {
+      sendJson(response, 501, { error_code: "POLICY_DENIED" });
+      return;
+    }
+
+    const body = beginEnrollmentBodySchema.parse(request.body);
+    sendJson(
+      response,
+      200,
+      signListResponse(
+        options.pkiService.beginEnrollment({
+          token: body.token,
+          deviceId: body.device_id,
+          publicKey: body.public_key
+        }),
+        options.serverSigningSecretKey
+      )
+    );
   });
 
-  app.post("/v1/enroll/complete", (_request, response) => {
-    sendJson(response, 501, { error_code: "POLICY_DENIED" });
+  app.post("/v1/enroll/complete", (request, response) => {
+    if (options.pkiService === undefined) {
+      sendJson(response, 501, { error_code: "POLICY_DENIED" });
+      return;
+    }
+
+    const body = completeEnrollmentBodySchema.parse(request.body);
+    const result = options.pkiService.completeEnrollment({
+      token: body.token,
+      challengeId: body.challenge_id,
+      proofSignature: body.proof_signature,
+      hardwareBacked: body.hardware_backed,
+      enrollmentEvent: parseEnrollmentEvent(body.enrollment_event)
+    });
+
+    sendJson(
+      response,
+      200,
+      signListResponse(
+        {
+          certificate: result.certificate,
+          acknowledgement: result.acknowledgement
+        },
+        options.serverSigningSecretKey
+      )
+    );
   });
 
   app.get("/v1/state", (request, response) => {
@@ -219,6 +278,11 @@ export function createErrorHandler(): ErrorRequestHandler {
       return;
     }
 
+    if (error instanceof PkiError) {
+      sendJson(response, errorStatus(error.errorCode), { error_code: error.errorCode });
+      return;
+    }
+
     if (error instanceof ZodError || isJsonParseError(error)) {
       sendJson(response, errorStatus("SCHEMA_INVALID"), { error_code: "SCHEMA_INVALID" });
       return;
@@ -226,6 +290,16 @@ export function createErrorHandler(): ErrorRequestHandler {
 
     sendJson(response, 500, { error_code: "POLICY_DENIED" });
   };
+}
+
+function parseEnrollmentEvent(value: unknown): ClientEventEnvelope {
+  const events = parseEventSubmission(value);
+  const event = events[0];
+  if (events.length !== 1 || event === undefined) {
+    throw new ApiError(400, "SCHEMA_INVALID");
+  }
+
+  return event;
 }
 
 function requireJsonContentType(request: Request, _response: Parameters<RequestHandler>[1], next: Parameters<RequestHandler>[2]): void {

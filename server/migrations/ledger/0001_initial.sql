@@ -55,6 +55,18 @@ CREATE TABLE IF NOT EXISTS enrollment_tokens (
   consumed_at  TEXT
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS enrollment_challenges (
+  id           TEXT PRIMARY KEY,
+  token_hash   TEXT NOT NULL REFERENCES enrollment_tokens(token_hash),
+  executive_id TEXT NOT NULL REFERENCES executives(id),
+  device_id    TEXT NOT NULL,
+  public_key   TEXT NOT NULL,
+  challenge    TEXT NOT NULL,
+  expires_at   TEXT NOT NULL,
+  consumed_at  TEXT,
+  created_at   TEXT NOT NULL
+) STRICT;
+
 CREATE TABLE IF NOT EXISTS ledger_events (
   id                    TEXT PRIMARY KEY,
   server_sequence       INTEGER UNIQUE,

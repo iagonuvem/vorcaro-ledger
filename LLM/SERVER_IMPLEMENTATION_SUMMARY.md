@@ -8,7 +8,8 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Step 2a, Database schema (§5): completed for the initial executable baseline.
 - Step 2b, Ledger append pipeline (§6): completed for the initial executable baseline.
 - Step 3a, Network interface and API surface (§7): completed for the initial executable baseline.
-- Server app: bootstrapped as the `server` workspace package; device/admin Express apps and mTLS listener factory exist, but PKI-backed certificate material and real deployment wiring remain later steps.
+- Step 4a, PKI enrollment and revocation baseline (§8): completed for the local executable baseline.
+- Server app: bootstrapped as the `server` workspace package; device/admin Express apps, mTLS listener factory, PKI service boundary, local CA adapter, enrollment, and revocation-list handling exist. Real `step-ca` deployment wiring remains a later operational integration.
 
 ## Completed
 
@@ -34,6 +35,13 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Added signed response wrappers for state-bearing API responses and an HTTPS listener factory that forces TLS 1.3, `requestCert: true`, `rejectUnauthorized: true`, and conservative timeout/header settings.
 - Added admin API app placeholder on the separate admin surface with closed-code stubs for the planned admin route groups.
 - Added API tests covering certificate-fingerprint identity binding, ignored-header audit logging, closed identity error codes, JSON string-to-bigint event normalization, signed state response verification, disabled Express version banners, and mandatory TLS 1.3 mTLS listener options.
+- Added `CertificateAuthority` adapter boundary plus deterministic `LocalCertificateAuthority` for tests; production is expected to back the same interface with Vorcaro-owned `step-ca`.
+- Added `PkiService` for one-time enrollment-token hashing, short-lived enrollment challenges, device possession proof verification, executive-signed `DEVICE_ENROLLED` event validation, certificate issuance through the CA adapter, device materialization, token/challenge consumption, and audit evidence.
+- Added revocation handling that asks the CA adapter to revoke the device certificate, marks the device revoked, and appends a signed `RevocationList` version for clients.
+- Added `enrollment_challenges` to the ledger schema and documented it in `DATABASE_OVERVIEW.md`.
+- Replaced the enrollment API stubs with working `/v1/enroll/begin` and `/v1/enroll/complete` handlers when a `PkiService` is wired; added an admin revocation route hook for `/admin/v1/devices/:id/revoke`.
+- Added `LLM/CA_AUTHORITY.md` describing the Vorcaro CA hierarchy, enrollment flow, runtime authentication, certificate lifetime, revocation, code boundaries, operational rules, and current implementation status.
+- Added PKI tests covering hashed-only token storage, challenge proof verification, certificate issuance, `DEVICE_ENROLLED` append, one-time token consumption, bad proof rejection, device revocation, and signed revocation-list creation.
 
 ## Verification
 
@@ -43,7 +51,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 
 ## Not Started
 
-- Enrollment implementation and PKI/CA integration (§8).
+- Real `step-ca` client integration and certificate renewal endpoint.
 - Checkpoints worker, snapshots, KMS, recovery, full policy engine, projections workers, admin console implementation, and server-side AI workers.
 
 ## Notes
@@ -53,3 +61,4 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - The database tests use Node's built-in SQLite engine against temporary databases; production SQLCipher key unwrap and HSM/KMS integration remain in the later KMS step.
 - The §6 appender currently performs the validation steps available before the later API, KMS, and policy phases. Policy evaluation/decryption and scheduled checkpoint emission remain deferred to their planned sections.
 - The §7 API tests avoid opening local sockets because this sandbox blocks `listen`; mTLS listener hardening is verified through the exported server option builder, while identity middleware is tested directly with an injected fingerprint resolver. Production defaults still read the peer certificate from the TLS socket.
+- The §8 CA adapter is intentionally local/test-only in this baseline. It preserves the server contract without introducing live CA network calls; production `step-ca` integration must implement the same `CertificateAuthority` interface.

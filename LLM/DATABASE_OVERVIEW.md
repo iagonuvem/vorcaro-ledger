@@ -233,6 +233,18 @@ CREATE TABLE enrollment_tokens (                -- one-time, admin-issued (§8 o
   consumed_at TEXT
 ) STRICT;
 
+CREATE TABLE enrollment_challenges (            -- short-lived pre-cert challenge
+  id           TEXT PRIMARY KEY,
+  token_hash   TEXT NOT NULL REFERENCES enrollment_tokens(token_hash),
+  executive_id TEXT NOT NULL REFERENCES executives(id),
+  device_id    TEXT NOT NULL,
+  public_key   TEXT NOT NULL,
+  challenge    TEXT NOT NULL,
+  expires_at   TEXT NOT NULL,
+  consumed_at  TEXT,
+  created_at   TEXT NOT NULL
+) STRICT;
+
 CREATE TABLE revocation_list_versions (         -- append-only; served signed to clients
   version    INTEGER PRIMARY KEY,
   document   TEXT NOT NULL CHECK (json_valid(document)),  -- RevocationList, COMMON_TYPES.md §3.7

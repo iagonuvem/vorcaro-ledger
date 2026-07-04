@@ -15,13 +15,27 @@ export {
   type AppendEventRequest,
   type LedgerAppenderOptions
 } from "./ledger/appender.js";
-export { createAdminApiApp } from "./api/admin-api.js";
+export { createAdminApiApp, type AdminApiOptions } from "./api/admin-api.js";
 export { createDeviceApiApp, createErrorHandler, type DeviceApiOptions } from "./api/device-api.js";
 export {
   buildMtlsServerOptions,
   createMtlsHttpsServer,
   type MtlsServerOptions
 } from "./api/listeners.js";
+export { LocalCertificateAuthority, type CertificateAuthority } from "./pki/authority.js";
+export {
+  PkiError,
+  PkiService,
+  hashEnrollmentToken,
+  type BeginEnrollmentInput,
+  type CompleteEnrollmentInput,
+  type CompleteEnrollmentResult,
+  type EnrollmentChallenge,
+  type IssueEnrollmentTokenInput,
+  type IssuedEnrollmentToken,
+  type PkiServiceOptions,
+  type RevokeDeviceInput
+} from "./pki/enrollment.js";
 
 export type ServerBootstrapStatus = {
   protocol_event_type_count: number;
