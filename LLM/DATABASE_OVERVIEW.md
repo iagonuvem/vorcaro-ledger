@@ -176,6 +176,23 @@ CREATE TABLE object_heads (
   conflicted    INTEGER NOT NULL DEFAULT 0 CHECK (conflicted IN (0,1)),
   PRIMARY KEY (object_type, object_id)
 ) STRICT, WITHOUT ROWID;
+
+CREATE TABLE conflicts (                       -- mutable conflict working set
+  id                   TEXT PRIMARY KEY,       -- cfl_<hash>; derived state, not truth
+  object_type          TEXT NOT NULL,
+  object_id            TEXT NOT NULL,
+  event_ids            TEXT NOT NULL CHECK (json_valid(event_ids)),
+  detected_at_sequence INTEGER NOT NULL,
+  status               TEXT NOT NULL CHECK (status IN ('open','resolved')),
+  resolution_event_id  TEXT,
+  ai_proposal_id       TEXT,
+  created_at           TEXT NOT NULL,
+  resolved_at          TEXT
+) STRICT;
+
+CREATE UNIQUE INDEX idx_conflicts_one_open_object
+  ON conflicts (object_type, object_id)
+  WHERE status = 'open';
 ```
 
 ### 4.3 Identity & PKI (materialized state; changes driven by ledger events)

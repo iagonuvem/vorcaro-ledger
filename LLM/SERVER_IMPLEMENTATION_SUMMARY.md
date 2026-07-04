@@ -9,6 +9,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Step 2b, Ledger append pipeline (§6): completed for the initial executable baseline.
 - Step 3a, Network interface and API surface (§7): completed for the initial executable baseline.
 - Step 4a, PKI enrollment and revocation baseline (§8): completed for the local executable baseline.
+- Step 5a, Conflict detection and resolution (§9): completed for the initial executable baseline.
 - Server app: bootstrapped as the `server` workspace package; device/admin Express apps, mTLS listener factory, PKI service boundary, local CA adapter, enrollment, and revocation-list handling exist. Real `step-ca` deployment wiring remains a later operational integration.
 
 ## Completed
@@ -42,6 +43,9 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Replaced the enrollment API stubs with working `/v1/enroll/begin` and `/v1/enroll/complete` handlers when a `PkiService` is wired; added an admin revocation route hook for `/admin/v1/devices/:id/revoke`.
 - Added `LLM/CA_AUTHORITY.md` describing the Vorcaro CA hierarchy, enrollment flow, runtime authentication, certificate lifetime, revocation, code boundaries, operational rules, and current implementation status.
 - Added PKI tests covering hashed-only token storage, challenge proof verification, certificate issuance, `DEVICE_ENROLLED` append, one-time token consumption, bad proof rejection, device revocation, and signed revocation-list creation.
+- Added mutable `conflicts` working table in `ledger.db` for open/resolved conflict materialization while keeping conflict truth in append-only ledger events.
+- Extended `LedgerAppender` conflict behavior so stale-object events create/update an open conflict record with permanent event ids, conflicted objects reject further writes with `POLICY_DENIED`, and only an accepted signed `CONFLICT_RESOLVED` event clears `object_heads.conflicted`, records `resolution_event_id`, and establishes the new head.
+- Added conflict tests covering durable open-conflict records, event-id retention, write blocking while conflicted, successful signed resolution, and closed-code rejection for resolution attempts without an open conflict.
 
 ## Verification
 
@@ -52,7 +56,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 ## Not Started
 
 - Real `step-ca` client integration and certificate renewal endpoint.
-- Checkpoints worker, snapshots, KMS, recovery, full policy engine, projections workers, admin console implementation, and server-side AI workers.
+- Checkpoints worker, snapshots, KMS, recovery, full policy engine, conflict projection worker, admin console implementation, and server-side AI workers.
 
 ## Notes
 
@@ -62,3 +66,4 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - The §6 appender currently performs the validation steps available before the later API, KMS, and policy phases. Policy evaluation/decryption and scheduled checkpoint emission remain deferred to their planned sections.
 - The §7 API tests avoid opening local sockets because this sandbox blocks `listen`; mTLS listener hardening is verified through the exported server option builder, while identity middleware is tested directly with an injected fingerprint resolver. Production defaults still read the peer certificate from the TLS socket.
 - The §8 CA adapter is intentionally local/test-only in this baseline. It preserves the server contract without introducing live CA network calls; production `step-ca` integration must implement the same `CertificateAuthority` interface.
+- The §9 implementation blocks all new ledger writes to a conflicted object until `CONFLICT_RESOLVED` lands. The later full policy engine can narrow this to the plan's material-action rule when read/annotation event types exist.

@@ -177,6 +177,9 @@ test("offline clients converge to one chain while stale-object writes are explic
     const independentHead = database
       .prepare("SELECT head_sequence, conflicted FROM object_heads WHERE object_id = ?")
       .get("acct_independent");
+    const conflict = database
+      .prepare("SELECT object_type, object_id, event_ids, detected_at_sequence, status FROM conflicts WHERE object_id = ?")
+      .get("acct_shared");
 
     assert.equal(first.status, "accepted");
     assert.equal(conflicted.status, "conflicted");
@@ -188,6 +191,127 @@ test("offline clients converge to one chain while stale-object writes are explic
     assert.equal(sharedHead.conflicted, 1);
     assert.equal(independentHead.head_sequence, 3);
     assert.equal(independentHead.conflicted, 0);
+    assert.equal(conflict.object_type, "account");
+    assert.equal(conflict.object_id, "acct_shared");
+    assert.equal(conflict.detected_at_sequence, 2);
+    assert.equal(conflict.status, "open");
+    assert.deepEqual(JSON.parse(conflict.event_ids), ["evt_client_one", "evt_client_two_conflict"]);
+  } finally {
+    database.close();
+    cleanup();
+  }
+});
+
+test("conflicted objects reject new writes until a signed CONFLICT_RESOLVED event lands", async () => {
+  const { database, appender, cleanup } = createFixture();
+
+  try {
+    await appender.append({
+      event: makeEvent({
+        eventId: "evt_conflict_head",
+        counter: 1n,
+        deviceId: "dev_1",
+        objectId: "acct_resolution",
+        baseServerSequence: 0n
+      }),
+      certificateFingerprint: "fingerprint-1"
+    });
+    const conflictAck = await appender.append({
+      event: makeEvent({
+        eventId: "evt_conflict_stale",
+        counter: 1n,
+        deviceId: "dev_2",
+        objectId: "acct_resolution",
+        baseServerSequence: 0n
+      }),
+      certificateFingerprint: "fingerprint-2"
+    });
+    const blockedAck = await appender.append({
+      event: makeEvent({
+        eventId: "evt_blocked_during_conflict",
+        counter: 2n,
+        deviceId: "dev_1",
+        objectId: "acct_resolution",
+        baseServerSequence: 2n
+      }),
+      certificateFingerprint: "fingerprint-1"
+    });
+    const resolutionAck = await appender.append({
+      event: makeEvent({
+        eventId: "evt_conflict_resolved",
+        eventType: "CONFLICT_RESOLVED",
+        counter: 3n,
+        deviceId: "dev_1",
+        objectId: "acct_resolution",
+        baseServerSequence: 2n
+      }),
+      certificateFingerprint: "fingerprint-1"
+    });
+    const head = database
+      .prepare("SELECT head_sequence, conflicted FROM object_heads WHERE object_id = ?")
+      .get("acct_resolution");
+    const conflict = database
+      .prepare("SELECT status, resolution_event_id, resolved_at FROM conflicts WHERE object_id = ?")
+      .get("acct_resolution");
+    const statuses = database
+      .prepare("SELECT id, status, error_code, server_sequence FROM ledger_events ORDER BY server_sequence")
+      .all();
+
+    assert.equal(conflictAck.status, "conflicted");
+    assert.equal(blockedAck.status, "rejected");
+    assert.equal(blockedAck.error_code, "POLICY_DENIED");
+    assert.equal(resolutionAck.status, "accepted");
+    assert.equal(head.head_sequence, 4);
+    assert.equal(head.conflicted, 0);
+    assert.equal(conflict.status, "resolved");
+    assert.equal(conflict.resolution_event_id, "evt_conflict_resolved");
+    assert.equal(conflict.resolved_at, "2026-07-01T14:23:15.000Z");
+    assert.deepEqual(
+      statuses.map((row) => [row.id, row.status, row.error_code, row.server_sequence]),
+      [
+        ["evt_conflict_head", "accepted", null, 1],
+        ["evt_conflict_stale", "conflicted", "CONFLICT", 2],
+        ["evt_blocked_during_conflict", "rejected", "POLICY_DENIED", 3],
+        ["evt_conflict_resolved", "accepted", null, 4]
+      ]
+    );
+  } finally {
+    database.close();
+    cleanup();
+  }
+});
+
+test("CONFLICT_RESOLVED without an open conflict appends a closed-code rejection", async () => {
+  const { database, appender, cleanup } = createFixture();
+
+  try {
+    await appender.append({
+      event: makeEvent({
+        eventId: "evt_resolution_head",
+        counter: 1n,
+        objectId: "acct_no_conflict"
+      }),
+      certificateFingerprint: "fingerprint-1"
+    });
+    const ack = await appender.append({
+      event: makeEvent({
+        eventId: "evt_resolution_without_conflict",
+        eventType: "CONFLICT_RESOLVED",
+        counter: 2n,
+        objectId: "acct_no_conflict",
+        baseServerSequence: 1n
+      }),
+      certificateFingerprint: "fingerprint-1"
+    });
+    const head = database
+      .prepare("SELECT head_sequence, conflicted FROM object_heads WHERE object_id = ?")
+      .get("acct_no_conflict");
+
+    assert.equal(ack.status, "rejected");
+    assert.equal(ack.error_code, "CONFLICT");
+    assert.equal(ack.server_sequence, 2n);
+    assert.equal(head.head_sequence, 1);
+    assert.equal(head.conflicted, 0);
   } finally {
     database.close();
     cleanup();
@@ -288,7 +412,7 @@ function makeEvent(options) {
   return signClientEvent(
     {
       event_id: options.eventId,
-      event_type: "ACCOUNT_CREATED",
+      event_type: options.eventType ?? "ACCOUNT_CREATED",
       actor_id: "exec_1",
       device_id: options.deviceId ?? "dev_1",
       client_timestamp: "2026-07-01T14:23:11Z",

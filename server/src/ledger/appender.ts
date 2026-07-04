@@ -5,6 +5,7 @@ import {
   computeLedgerHash,
   constantTimeEqual,
   payloadHash,
+  sha256Hex,
   signServerAck,
   verifyClientEventSignature,
   type ClientEventEnvelope,
@@ -50,11 +51,22 @@ type ExecutiveKeyRow = {
 
 type ObjectHeadRow = {
   readonly head_sequence: number;
+  readonly conflicted: number;
 };
 
 type ChainHeadRow = {
   readonly server_sequence: number;
   readonly resulting_ledger_hash: string;
+};
+
+type HeadEventRow = {
+  readonly id: string;
+};
+
+type ConflictRow = {
+  readonly id: string;
+  readonly event_ids: string;
+  readonly status: "open" | "resolved";
 };
 
 export class LedgerAppender {
@@ -139,6 +151,19 @@ export class LedgerAppender {
     }
 
     const objectHead = this.findObjectHead(event.object_type, event.object_id);
+
+    if (event.event_type === "CONFLICT_RESOLVED") {
+      if (objectHead === undefined || objectHead.conflicted !== 1 || this.findOpenConflict(event.object_type, event.object_id) === undefined) {
+        return this.appendRejectedEvent(event, "CONFLICT");
+      }
+
+      return this.appendValidatedEvent(event, "accepted", null);
+    }
+
+    if (objectHead?.conflicted === 1) {
+      return this.appendRejectedEvent(event, "POLICY_DENIED");
+    }
+
     const isConflict =
       objectHead !== undefined && event.base_server_sequence < BigInt(objectHead.head_sequence);
 
@@ -180,6 +205,7 @@ export class LedgerAppender {
         serverTimestamp
       });
       this.updateDeviceWatermark(event.device_id, event.device_event_counter, serverTimestamp);
+      this.updateConflictState(event, serverSequence, status, serverTimestamp);
       this.updateObjectHead(event, serverSequence, status);
 
       this.database.exec("COMMIT");
@@ -250,8 +276,28 @@ export class LedgerAppender {
 
   private findObjectHead(objectType: string, objectId: string): ObjectHeadRow | undefined {
     return this.database
-      .prepare("SELECT head_sequence FROM object_heads WHERE object_type = ? AND object_id = ?")
+      .prepare("SELECT head_sequence, conflicted FROM object_heads WHERE object_type = ? AND object_id = ?")
       .get(objectType, objectId) as ObjectHeadRow | undefined;
+  }
+
+  private findOpenConflict(objectType: string, objectId: string): ConflictRow | undefined {
+    return this.database
+      .prepare(
+        `SELECT id, event_ids, status
+        FROM conflicts
+        WHERE object_type = ?
+          AND object_id = ?
+          AND status = 'open'
+        LIMIT 1`
+      )
+      .get(objectType, objectId) as ConflictRow | undefined;
+  }
+
+  private findHeadEventId(serverSequence: number): string | undefined {
+    const row = this.database
+      .prepare("SELECT id FROM ledger_events WHERE server_sequence = ?")
+      .get(serverSequence) as HeadEventRow | undefined;
+    return row?.id;
   }
 
   private nextServerSequence(): number {
@@ -334,6 +380,17 @@ export class LedgerAppender {
 
   private updateObjectHead(event: ClientEventEnvelope, serverSequence: number, status: EventStatus): void {
     if (status === "accepted") {
+      if (event.event_type === "CONFLICT_RESOLVED") {
+        this.database
+          .prepare(
+            `UPDATE object_heads
+            SET head_sequence = ?, conflicted = 0
+            WHERE object_type = ? AND object_id = ?`
+          )
+          .run(serverSequence, event.object_type, event.object_id);
+        return;
+      }
+
       this.database
         .prepare(
           `INSERT INTO object_heads (object_type, object_id, head_sequence, conflicted)
@@ -355,6 +412,78 @@ export class LedgerAppender {
         )
         .run(event.object_type, event.object_id);
     }
+  }
+
+  private updateConflictState(
+    event: ClientEventEnvelope,
+    serverSequence: number,
+    status: EventStatus,
+    serverTimestamp: string
+  ): void {
+    if (status === "conflicted") {
+      this.openConflict(event, serverSequence, serverTimestamp);
+      return;
+    }
+
+    if (status === "accepted" && event.event_type === "CONFLICT_RESOLVED") {
+      this.resolveConflict(event, serverTimestamp);
+    }
+  }
+
+  private openConflict(event: ClientEventEnvelope, serverSequence: number, serverTimestamp: string): void {
+    const objectHead = this.findObjectHead(event.object_type, event.object_id);
+    const existingConflict = this.findOpenConflict(event.object_type, event.object_id);
+    const eventIds = existingConflict === undefined ? [] : parseConflictEventIds(existingConflict.event_ids);
+    const headEventId = objectHead === undefined ? undefined : this.findHeadEventId(objectHead.head_sequence);
+
+    if (headEventId !== undefined && !eventIds.includes(headEventId)) {
+      eventIds.push(headEventId);
+    }
+
+    if (!eventIds.includes(event.event_id)) {
+      eventIds.push(event.event_id);
+    }
+
+    if (existingConflict !== undefined) {
+      this.database
+        .prepare("UPDATE conflicts SET event_ids = ? WHERE id = ?")
+        .run(JSON.stringify(eventIds), existingConflict.id);
+      return;
+    }
+
+    this.database
+      .prepare(
+        `INSERT INTO conflicts (
+          id, object_type, object_id, event_ids, detected_at_sequence,
+          status, resolution_event_id, ai_proposal_id, created_at, resolved_at
+        ) VALUES (?, ?, ?, ?, ?, 'open', NULL, NULL, ?, NULL)`
+      )
+      .run(
+        conflictId(event.object_type, event.object_id, serverSequence),
+        event.object_type,
+        event.object_id,
+        JSON.stringify(eventIds),
+        serverSequence,
+        serverTimestamp
+      );
+  }
+
+  private resolveConflict(event: ClientEventEnvelope, serverTimestamp: string): void {
+    const existingConflict = this.findOpenConflict(event.object_type, event.object_id);
+
+    if (existingConflict === undefined) {
+      throw new Error("No open conflict exists for accepted resolution event");
+    }
+
+    this.database
+      .prepare(
+        `UPDATE conflicts
+        SET status = 'resolved',
+          resolution_event_id = ?,
+          resolved_at = ?
+        WHERE id = ?`
+      )
+      .run(event.event_id, serverTimestamp, existingConflict.id);
   }
 }
 
@@ -390,6 +519,15 @@ function stringifyPolicyMetadata(policyMetadata: ClientEventEnvelope["policy_met
   return JSON.stringify(policyMetadata, (_key, value: unknown) =>
     typeof value === "bigint" ? value.toString(10) : value
   );
+}
+
+function parseConflictEventIds(raw: string): string[] {
+  const parsed = JSON.parse(raw) as unknown;
+  return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+}
+
+function conflictId(objectType: string, objectId: string, detectedAtSequence: number): string {
+  return `cfl_${sha256Hex(`${objectType}:${objectId}:${detectedAtSequence}`).slice(0, 26)}`;
 }
 
 function toSqlInteger(value: bigint): number {

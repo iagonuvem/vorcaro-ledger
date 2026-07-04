@@ -113,6 +113,23 @@ CREATE TABLE IF NOT EXISTS object_heads (
   PRIMARY KEY (object_type, object_id)
 ) STRICT, WITHOUT ROWID;
 
+CREATE TABLE IF NOT EXISTS conflicts (
+  id                   TEXT PRIMARY KEY,
+  object_type          TEXT NOT NULL,
+  object_id            TEXT NOT NULL,
+  event_ids            TEXT NOT NULL CHECK (json_valid(event_ids)),
+  detected_at_sequence INTEGER NOT NULL,
+  status               TEXT NOT NULL CHECK (status IN ('open','resolved')),
+  resolution_event_id  TEXT,
+  ai_proposal_id       TEXT,
+  created_at           TEXT NOT NULL,
+  resolved_at          TEXT
+) STRICT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_conflicts_one_open_object
+  ON conflicts (object_type, object_id)
+  WHERE status = 'open';
+
 CREATE TABLE IF NOT EXISTS revocation_list_versions (
   version   INTEGER PRIMARY KEY,
   document  TEXT NOT NULL CHECK (json_valid(document)),
