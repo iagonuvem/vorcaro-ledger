@@ -1,0 +1,24 @@
+{
+  "name": "@vorcaro/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vorcaro finance server.",
+  "license": "GPL-3.0-only",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "pnpm run build",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@vorcaro/protocol": "workspace:*",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.10",
+    "typescript": "^5.8.3"
+  }
+}
