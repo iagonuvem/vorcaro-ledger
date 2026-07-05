@@ -31,7 +31,11 @@ const fixtureEvent: UnsignedClientEventEnvelope = {
     account_id: "acct_01J0000000000000000000000",
     amount_minor_units: 125000n,
     currency: "USD",
-    entity_id: "ent_01J00000000000000000000000"
+    default_currency_snapshot_id: "ccysnap_01J000000000000000000",
+    entity_id: "ent_01J00000000000000000000000",
+    exchange_rate: "1",
+    local_rate: 125000n,
+    transaction_currency: "USD"
   },
   payload_hash: "sha256:9a5df3729917cba86db1a823bdedea240ac08fd1cdacb93ac8d987c09b49bb08",
   encrypted_payload: "Zml4dHVyZS1wYXlsb2Fk"
@@ -85,6 +89,25 @@ test("payload hash is over encrypted payload bytes", () => {
   assert.equal(payloadHash(fixtureEvent.encrypted_payload), fixtureEvent.payload_hash);
 });
 
+test("monetary policy metadata requires exchange-rate audit fields", () => {
+  const keys = deriveSigningKeyPair(Buffer.alloc(32, 13));
+
+  assert.throws(() =>
+    signClientEvent(
+      {
+        ...fixtureEvent,
+        event_id: "evt_01J00000000000000000000001",
+        policy_metadata: {
+          account_id: "acct_01J0000000000000000000000",
+          amount_minor_units: 125000n,
+          currency: "USD"
+        }
+      },
+      keys.secretKey
+    )
+  );
+});
+
 test("10k generated schema-valid events round-trip through serialize, sign, and verify", () => {
   const keys = deriveSigningKeyPair(Buffer.alloc(32, 11));
 
@@ -103,7 +126,11 @@ test("10k generated schema-valid events round-trip through serialize, sign, and 
       policy_metadata: {
         account_id: "acct_01J0000000000000000000000",
         amount_minor_units: BigInt(index * 100),
-        currency: "USD"
+        currency: "USD",
+        default_currency_snapshot_id: "ccysnap_01J000000000000000000",
+        exchange_rate: "1",
+        local_rate: BigInt(index * 100),
+        transaction_currency: "USD"
       },
       payload_hash: payloadHash(payload),
       encrypted_payload: payload

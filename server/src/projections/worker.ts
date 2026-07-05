@@ -28,6 +28,9 @@ type AccountAggregateRow = {
   readonly entity_id: string;
   readonly currency: string;
   readonly total_minor_units: number;
+  readonly default_currency: string | null;
+  readonly default_total_minor_units: number | null;
+  readonly default_currency_snapshot_id: string | null;
   readonly as_of_sequence: number;
 };
 
@@ -236,6 +239,9 @@ export class ProjectionWorker {
           entity_id,
           currency,
           SUM(balance_minor_units) AS total_minor_units,
+          NULL AS default_currency,
+          NULL AS default_total_minor_units,
+          NULL AS default_currency_snapshot_id,
           MAX(as_of_sequence) AS as_of_sequence
         FROM proj_accounts
         WHERE status <> 'closed'
@@ -248,10 +254,19 @@ export class ProjectionWorker {
         .prepare(
           `INSERT INTO proj_cash_position (
             entity_id, currency, total_minor_units,
+            default_currency, default_total_minor_units, default_currency_snapshot_id,
             pending_delta_minor_units, as_of_sequence
-          ) VALUES (?, ?, ?, 0, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
         )
-        .run(row.entity_id, row.currency, row.total_minor_units, row.as_of_sequence);
+        .run(
+          row.entity_id,
+          row.currency,
+          row.total_minor_units,
+          row.default_currency,
+          row.default_total_minor_units,
+          row.default_currency_snapshot_id,
+          row.as_of_sequence
+        );
     }
   }
 
@@ -291,12 +306,20 @@ export class ProjectionWorker {
     account_id?: string;
     entity_id?: string;
     currency?: string;
+    transaction_currency?: string;
+    exchange_rate?: string;
+    default_currency_snapshot_id?: string;
+    local_rate?: bigint;
   } {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const metadata: {
       account_id?: string;
       entity_id?: string;
       currency?: string;
+      transaction_currency?: string;
+      exchange_rate?: string;
+      default_currency_snapshot_id?: string;
+      local_rate?: bigint;
     } = {};
 
     if (typeof parsed.account_id === "string") {
@@ -309,6 +332,22 @@ export class ProjectionWorker {
 
     if (typeof parsed.currency === "string") {
       metadata.currency = parsed.currency;
+    }
+
+    if (typeof parsed.transaction_currency === "string") {
+      metadata.transaction_currency = parsed.transaction_currency;
+    }
+
+    if (typeof parsed.exchange_rate === "string") {
+      metadata.exchange_rate = parsed.exchange_rate;
+    }
+
+    if (typeof parsed.default_currency_snapshot_id === "string") {
+      metadata.default_currency_snapshot_id = parsed.default_currency_snapshot_id;
+    }
+
+    if (typeof parsed.local_rate === "string" || typeof parsed.local_rate === "number") {
+      metadata.local_rate = BigInt(parsed.local_rate);
     }
 
     return metadata;

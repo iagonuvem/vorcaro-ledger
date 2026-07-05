@@ -424,7 +424,11 @@ function makeEvent(options) {
         account_id: options.objectId ?? "acct_default",
         entity_id: "ent_1",
         amount_minor_units: 1000n,
-        currency: "USD"
+        currency: "USD",
+        default_currency_snapshot_id: "ccysnap_test_usd",
+        exchange_rate: "1",
+        local_rate: 1000n,
+        transaction_currency: "USD"
       },
       payload_hash: options.payloadHashOverride ?? payloadHash(payload),
       encrypted_payload: payload

@@ -162,10 +162,20 @@ export class LedgerAppender {
       return this.appendRejectedEvent(event, "BAD_PAYLOAD_HASH");
     }
 
-    const policyDecision = PolicyEngine.evaluateActivePolicy(this.database, event, {
-      actorRole: device.executive_role,
-      riskScore: device.risk_score
-    });
+    let policyDecision: ReturnType<typeof PolicyEngine.evaluateActivePolicy>;
+
+    try {
+      policyDecision = PolicyEngine.evaluateActivePolicy(this.database, event, {
+        actorRole: device.executive_role,
+        riskScore: device.risk_score
+      });
+    } catch (error) {
+      if (error instanceof Error && "errorCode" in error && typeof error.errorCode === "string") {
+        return this.appendRejectedEvent(event, error.errorCode as ErrorCode);
+      }
+
+      throw error;
+    }
 
     if (policyDecision.outcome === "deny") {
       return this.appendRejectedEvent(event, policyDecision.errorCode);

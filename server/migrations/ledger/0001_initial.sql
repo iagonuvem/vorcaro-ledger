@@ -80,6 +80,10 @@ CREATE TABLE IF NOT EXISTS ledger_events (
   policy_metadata       TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(policy_metadata)),
   account_id            TEXT GENERATED ALWAYS AS (json_extract(policy_metadata, '$.account_id')) STORED,
   entity_id             TEXT GENERATED ALWAYS AS (json_extract(policy_metadata, '$.entity_id')) STORED,
+  transaction_currency  TEXT GENERATED ALWAYS AS (json_extract(policy_metadata, '$.transaction_currency')) STORED,
+  exchange_rate         TEXT GENERATED ALWAYS AS (json_extract(policy_metadata, '$.exchange_rate')) STORED,
+  default_currency_snapshot_id TEXT GENERATED ALWAYS AS (json_extract(policy_metadata, '$.default_currency_snapshot_id')) STORED,
+  local_rate            INTEGER GENERATED ALWAYS AS (json_extract(policy_metadata, '$.local_rate')) STORED,
   encrypted_payload     BLOB NOT NULL,
   payload_hash          TEXT NOT NULL,
   previous_ledger_hash  TEXT,
@@ -102,6 +106,9 @@ CREATE TABLE IF NOT EXISTS ledger_events (
 
 CREATE INDEX IF NOT EXISTS idx_ledger_object ON ledger_events (object_type, object_id, server_sequence);
 CREATE INDEX IF NOT EXISTS idx_ledger_account ON ledger_events (account_id) WHERE account_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ledger_currency_snapshot
+  ON ledger_events (default_currency_snapshot_id)
+  WHERE default_currency_snapshot_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_ledger_actor ON ledger_events (actor_id, server_sequence);
 CREATE INDEX IF NOT EXISTS idx_ledger_status ON ledger_events (status) WHERE status <> 'accepted';
 
@@ -176,6 +183,9 @@ CREATE TABLE IF NOT EXISTS recovery_approvals (
 CREATE TABLE IF NOT EXISTS policies (
   id                    TEXT PRIMARY KEY,
   version               INTEGER NOT NULL UNIQUE,
+  default_currency      TEXT NOT NULL,
+  default_currency_snapshot_id TEXT NOT NULL,
+  default_currency_snapshot_hash TEXT NOT NULL,
   document              TEXT NOT NULL CHECK (json_valid(document)),
   document_hash         TEXT NOT NULL,
   activated_at_sequence INTEGER

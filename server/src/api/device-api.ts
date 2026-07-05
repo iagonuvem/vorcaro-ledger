@@ -358,7 +358,8 @@ function normalizeEvent(event: unknown): unknown {
     policy_metadata: isRecord(event.policy_metadata)
       ? {
           ...event.policy_metadata,
-          amount_minor_units: normalizeOptionalBigIntField(event.policy_metadata.amount_minor_units)
+          amount_minor_units: normalizeOptionalBigIntField(event.policy_metadata.amount_minor_units),
+          local_rate: normalizeOptionalBigIntField(event.policy_metadata.local_rate)
         }
       : event.policy_metadata
   };
@@ -547,7 +548,15 @@ function parsePolicyMetadata(raw: string): LedgerEvent["policy_metadata"] {
       typeof parsed.amount_minor_units === "string" || typeof parsed.amount_minor_units === "number"
         ? BigInt(parsed.amount_minor_units)
         : undefined,
-    currency: typeof parsed.currency === "string" ? parsed.currency : undefined
+    currency: typeof parsed.currency === "string" ? parsed.currency : undefined,
+    transaction_currency: typeof parsed.transaction_currency === "string" ? parsed.transaction_currency : undefined,
+    exchange_rate: typeof parsed.exchange_rate === "string" ? parsed.exchange_rate : undefined,
+    default_currency_snapshot_id:
+      typeof parsed.default_currency_snapshot_id === "string" ? parsed.default_currency_snapshot_id : undefined,
+    local_rate:
+      typeof parsed.local_rate === "string" || typeof parsed.local_rate === "number"
+        ? BigInt(parsed.local_rate)
+        : undefined
   };
 }
 

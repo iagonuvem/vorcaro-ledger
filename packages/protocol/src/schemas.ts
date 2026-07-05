@@ -103,6 +103,10 @@ export const aiInsightKinds = [
 ] as const;
 
 export const currencyCodeSchema = z.string().regex(/^[A-Z]{3}$/);
+export const exchangeRateSchema = z
+  .string()
+  .regex(/^(0|[1-9]\d*)(\.\d{1,12})?$/)
+  .refine((value) => !/^0(?:\.0+)?$/.test(value));
 export const hashSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 export const base64Schema = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/);
 export const isoUtcTimestampSchema = z.string().datetime({ offset: true });
@@ -127,9 +131,35 @@ export const policyMetadataSchema = z
     counterparty_account_id: z.string().min(1).optional(),
     entity_id: z.string().min(1).optional(),
     amount_minor_units: z.bigint().optional(),
-    currency: currencyCodeSchema.optional()
+    currency: currencyCodeSchema.optional(),
+    transaction_currency: currencyCodeSchema.optional(),
+    exchange_rate: exchangeRateSchema.optional(),
+    default_currency_snapshot_id: z.string().min(1).optional(),
+    local_rate: z.bigint().nonnegative().optional()
   })
-  .strict();
+  .strict()
+  .superRefine((metadata, context) => {
+    const hasMonetaryField =
+      metadata.amount_minor_units !== undefined ||
+      metadata.transaction_currency !== undefined ||
+      metadata.exchange_rate !== undefined ||
+      metadata.default_currency_snapshot_id !== undefined ||
+      metadata.local_rate !== undefined;
+
+    if (!hasMonetaryField) {
+      return;
+    }
+
+    for (const field of ["transaction_currency", "exchange_rate", "default_currency_snapshot_id", "local_rate"] as const) {
+      if (metadata[field] === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: `${field} is required for monetary policy metadata`
+        });
+      }
+    }
+  });
 
 export const clientEventEnvelopeSchema = z
   .object({
@@ -322,6 +352,7 @@ export const policyDocumentSchema = z
   .object({
     id: z.string().min(1),
     version: z.number().int().positive(),
+    default_currency: currencyCodeSchema,
     permissions: z.array(permissionSchema),
     approval_rules: z.array(approvalRuleSchema),
     document_hash: hashSchema,

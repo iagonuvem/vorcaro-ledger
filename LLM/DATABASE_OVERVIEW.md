@@ -134,6 +134,14 @@ CREATE TABLE ledger_events (
                           (json_extract(policy_metadata, '$.account_id')) STORED,
   entity_id             TEXT GENERATED ALWAYS AS
                           (json_extract(policy_metadata, '$.entity_id')) STORED,
+  transaction_currency  TEXT GENERATED ALWAYS AS
+                          (json_extract(policy_metadata, '$.transaction_currency')) STORED,
+  exchange_rate         TEXT GENERATED ALWAYS AS
+                          (json_extract(policy_metadata, '$.exchange_rate')) STORED,
+  default_currency_snapshot_id TEXT GENERATED ALWAYS AS
+                          (json_extract(policy_metadata, '$.default_currency_snapshot_id')) STORED,
+  local_rate            INTEGER GENERATED ALWAYS AS
+                          (json_extract(policy_metadata, '$.local_rate')) STORED,
   encrypted_payload     BLOB NOT NULL,
   payload_hash          TEXT NOT NULL,
   previous_ledger_hash  TEXT,                   -- server-assigned at append
@@ -321,6 +329,9 @@ CREATE TABLE recovery_approvals (               -- append-only: an approval, onc
 CREATE TABLE policies (
   id                     TEXT PRIMARY KEY,
   version                INTEGER NOT NULL UNIQUE,
+  default_currency       TEXT NOT NULL,
+  default_currency_snapshot_id TEXT NOT NULL,
+  default_currency_snapshot_hash TEXT NOT NULL,
   document               TEXT NOT NULL CHECK (json_valid(document)),
   document_hash          TEXT NOT NULL,
   activated_at_sequence  INTEGER               -- set via the POLICY_CHANGED event's
@@ -378,6 +389,9 @@ CREATE TABLE proj_cash_position (               -- aggregated across accounts
   entity_id           TEXT NOT NULL,
   currency            TEXT NOT NULL,
   total_minor_units   INTEGER NOT NULL,
+  default_currency    TEXT,
+  default_total_minor_units INTEGER,
+  default_currency_snapshot_id TEXT,
   pending_delta_minor_units INTEGER NOT NULL,   -- pending shown separately (DESIGN.md §2)
   as_of_sequence      INTEGER NOT NULL,
   PRIMARY KEY (entity_id, currency)
@@ -391,6 +405,12 @@ CREATE TABLE proj_transactions (
   direction           TEXT NOT NULL,
   amount_minor_units  INTEGER NOT NULL,
   currency            TEXT NOT NULL,
+  transaction_currency TEXT NOT NULL,
+  exchange_rate       TEXT NOT NULL,
+  local_rate          INTEGER NOT NULL,
+  default_currency    TEXT NOT NULL,
+  default_amount_minor_units INTEGER NOT NULL,
+  default_currency_snapshot_id TEXT NOT NULL,
   occurred_at         TEXT NOT NULL,
   classification      TEXT,
   reconciled          INTEGER NOT NULL DEFAULT 0,
@@ -401,6 +421,9 @@ CREATE INDEX idx_proj_txn_account ON proj_transactions (account_id, occurred_at)
 CREATE TABLE proj_budget_lines (
   budget_id TEXT NOT NULL, category TEXT NOT NULL,
   amount_minor_units INTEGER NOT NULL, currency TEXT NOT NULL,
+  transaction_currency TEXT, exchange_rate TEXT, local_rate INTEGER,
+  default_currency TEXT, default_amount_minor_units INTEGER,
+  default_currency_snapshot_id TEXT,
   status TEXT NOT NULL,
   PRIMARY KEY (budget_id, category)
 ) STRICT, WITHOUT ROWID;
@@ -412,6 +435,12 @@ CREATE TABLE proj_approvals_open (
   account_id      TEXT,
   amount_minor_units INTEGER,
   currency        TEXT,
+  transaction_currency TEXT,
+  exchange_rate   TEXT,
+  local_rate      INTEGER,
+  default_currency TEXT,
+  default_amount_minor_units INTEGER,
+  default_currency_snapshot_id TEXT,
   required_count  INTEGER NOT NULL,
   signature_count INTEGER NOT NULL,
   requested_by    TEXT NOT NULL,

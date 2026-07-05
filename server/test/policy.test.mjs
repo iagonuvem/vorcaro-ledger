@@ -32,6 +32,12 @@ test("policy engine allows, denies, and requires approvals from a versioned docu
         object_type: "account",
         actions: ["create"],
         conditions: { currency: "USD", max_amount_minor_units: "100000" }
+      },
+      {
+        role: "CFO",
+        object_type: "account",
+        actions: ["create"],
+        conditions: { currency: "EUR", max_amount_minor_units: "100000" }
       }
     ],
     approval_rules: [
@@ -71,7 +77,10 @@ test("policy engine allows, denies, and requires approvals from a versioned docu
         counter: 2n,
         actorId: "exec_cfo",
         deviceId: "dev_cfo",
-        amount: 75000n
+        amount: 40000n,
+        exchangeRate: "1.5",
+        localRate: 40000n,
+        transactionCurrency: "EUR"
       }),
       { actorRole: "CFO", riskScore: 10 }
     ),
@@ -187,6 +196,10 @@ test("ledger appender consults active policy before conflict handling", async ()
       ]
     });
     insertActivePolicy(database, policy);
+    const snapshot = PolicyEngine.defaultCurrencySnapshot({
+      ...policy,
+      activated_at_sequence: 0n
+    });
 
     const pending = await appender.append({
       event: makeEvent({
@@ -194,7 +207,20 @@ test("ledger appender consults active policy before conflict handling", async ()
         counter: 1n,
         actorId: "exec_cfo",
         deviceId: "dev_cfo",
-        amount: 7000n
+        amount: 7000n,
+        defaultCurrencySnapshotId: snapshot.id
+      }),
+      certificateFingerprint: "fingerprint-cfo"
+    });
+    const wrongSnapshot = await appender.append({
+      event: makeEvent({
+        eventId: "evt_policy_bad_snapshot",
+        counter: 2n,
+        actorId: "exec_cfo",
+        deviceId: "dev_cfo",
+        amount: 7000n,
+        objectId: "acct_policy_bad_snapshot",
+        defaultCurrencySnapshotId: "ccysnap_wrong"
       }),
       certificateFingerprint: "fingerprint-cfo"
     });
@@ -213,12 +239,15 @@ test("ledger appender consults active policy before conflict handling", async ()
 
     assert.equal(pending.status, "pending");
     assert.equal(pending.error_code, "APPROVALS_REQUIRED");
+    assert.equal(wrongSnapshot.status, "rejected");
+    assert.equal(wrongSnapshot.error_code, "POLICY_VERSION_MISMATCH");
     assert.equal(denied.status, "rejected");
     assert.equal(denied.error_code, "POLICY_DENIED");
     assert.deepEqual(
       rows.map((row) => [row.id, row.status, row.error_code]),
       [
         ["evt_policy_pending", "pending", "APPROVALS_REQUIRED"],
+        ["evt_policy_bad_snapshot", "rejected", "POLICY_VERSION_MISMATCH"],
         ["evt_policy_denied", "rejected", "POLICY_DENIED"]
       ]
     );
@@ -279,6 +308,7 @@ function makePolicy(input) {
   const unsigned = {
     id: input.id,
     version: input.version,
+    default_currency: input.defaultCurrency ?? "USD",
     permissions: input.permissions,
     approval_rules: input.approval_rules,
     activated_at_sequence: null
@@ -295,12 +325,16 @@ function insertActivePolicy(database, policy) {
   database
     .prepare(
       `INSERT INTO policies (
-        id, version, document, document_hash, activated_at_sequence
-      ) VALUES (?, ?, ?, ?, ?)`
+        id, version, default_currency, default_currency_snapshot_id,
+        default_currency_snapshot_hash, document, document_hash, activated_at_sequence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       policy.id,
       policy.version,
+      policy.default_currency,
+      PolicyEngine.defaultCurrencySnapshot({ ...policy, activated_at_sequence: 0n }).id,
+      PolicyEngine.defaultCurrencySnapshot({ ...policy, activated_at_sequence: 0n }).hash,
       PolicyEngine.serializePolicyDocument({
         ...policy,
         activated_at_sequence: 0n
@@ -333,7 +367,11 @@ function makeEvent(options) {
               account_id: options.objectId ?? `acct_${options.eventId}`,
               entity_id: "ent_1",
               amount_minor_units: options.amount ?? 1000n,
-              currency: "USD"
+              currency: "USD",
+              default_currency_snapshot_id: options.defaultCurrencySnapshotId ?? "ccysnap_test_usd",
+              exchange_rate: options.exchangeRate ?? "1",
+              local_rate: options.localRate ?? options.amount ?? 1000n,
+              transaction_currency: options.transactionCurrency ?? "USD"
             },
       payload_hash: payloadHash(payload),
       encrypted_payload: payload

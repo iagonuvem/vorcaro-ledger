@@ -21,6 +21,10 @@ The server is the operational source of truth. It:
   `account_id` in the plaintext `policy_metadata` of every money-moving event, so
   per-account policy, conflict detection, and projections work without payload
   decryption. There is no fixed account limit anywhere in the schema or API.
+* Tracks multi-currency finance data: each money-moving event carries
+  `transaction_currency`, `exchange_rate`, `default_currency_snapshot_id`, and
+  `local_rate`, while the active policy defines the enterprise default currency
+  used for thresholds and reporting totals.
 * Emits signed checkpoints (rollback evidence) and periodic snapshots.
 * Runs the PKI, KMS integration, recovery ceremonies, and the admin console.
 * Serves reporting projections derived from the ledger.
@@ -97,8 +101,12 @@ Everything the client and server must agree on, byte-for-byte, lives here.
   `PLAN.md` §6 — `event_id`, `event_type`, `actor_id`, `device_id`,
   `client_timestamp`, `base_server_sequence`, `device_event_counter`,
   `object_type`, `object_id`, `payload_hash`, `encrypted_payload`, plus
-  plaintext policy metadata (e.g. `amount_minor_units`, `currency` for payment
-  events — required so threshold policy can run pre-decryption).
+  plaintext policy metadata required so threshold policy can run pre-decryption.
+  Monetary events must include `account_id`, `entity_id`,
+  `transaction_currency`, `exchange_rate`, `default_currency_snapshot_id`, and
+  `local_rate`; `exchange_rate` is a decimal string paired with the referenced
+  default-currency snapshot, `local_rate` is integer minor units in
+  `transaction_currency`, and no floating-point money is accepted.
 * **Signing rule**: `client_signature = Ed25519.sign(JCS(envelope minus signature fields))`.
   One function, `canonicalEventBytes(event)`, used by both sides. Test it with a
   golden-bytes fixture file — if the fixture changes, that's a protocol break.
@@ -132,8 +140,10 @@ Storage model:
 * SQLCipher full-database encryption; the DB key is HSM-wrapped (same envelope
   discipline as payload DEKs, §11). WAL mode, `synchronous = FULL`, STRICT tables.
 * `ledger_events` matches the `LedgerEvent` type in `COMMON_TYPES.md` §2.1, with
-  generated columns exposing `policy_metadata` fields (`account_id`, `entity_id`)
-  for per-account indexing.
+  generated columns exposing `policy_metadata` fields (`account_id`,
+  `entity_id`, `transaction_currency`, `exchange_rate`,
+  `default_currency_snapshot_id`, `local_rate`) for per-account indexing, policy
+  threshold checks, and projection rebuilds.
 
 Hard rules:
 
@@ -157,6 +167,12 @@ Hard rules:
   generated-column index `idx_ledger_account` supports per-account reads and
   projection rebuilds. Account state itself is event-sourced — there is no mutable
   `accounts` table; `proj_accounts` (§10) is the read model.
+* Multi-currency: money-moving events preserve the original
+  `transaction_currency` and `local_rate`, plus the immutable `exchange_rate`
+  into the active enterprise default currency and the
+  `default_currency_snapshot_id` that proves which currency policy snapshot was
+  used. Default-currency totals are derived in projections; ledger rows are never
+  rewritten when the default currency changes later.
 
 ---
 
@@ -180,8 +196,13 @@ Validation pipeline, in order, fail-fast with the closed error enum:
                       revocation rule from PLAN.md §5.2).
 6. Payload hash     — SHA256(encrypted_payload) == payload_hash.
 7. Policy           — run policy engine on plaintext policy_metadata + decrypted payload
-                      (server is trusted decryptor). Multi-party requirements produce
-                      status=pending awaiting co-approval events, not rejection.
+                      (server is trusted decryptor). Monetary payload fields must
+                      agree with policy_metadata transaction_currency,
+                      exchange_rate, default_currency_snapshot_id, and local_rate.
+                      Thresholds compare the default-currency value derived from
+                      the referenced active default-currency snapshot; multi-party
+                      requirements produce status=pending awaiting co-approval
+                      events, not rejection.
 8. Conflict         — base_server_sequence < object_heads.head_sequence for the same
                       (object_type, object_id)? → status=conflicted, object flagged.
 9. Append           — assign server_sequence (gapless), compute previous/resulting
@@ -376,6 +397,11 @@ Detection is already in the append pipeline (step 8). Resolution:
   grouped by entity and currency; `proj_budget_lines`, `proj_approvals_open`,
   …) built by idempotent projection workers keyed on `server_sequence`. Rebuildable
   from scratch at any time — projections are cache, the ledger is truth.
+  Monetary projections must retain original `transaction_currency`/`local_rate`
+  values, the `default_currency_snapshot_id`, and the derived default-currency
+  amount used for policy, cash-position, and board reporting. Reports must label
+  the currency basis rather than mixing raw transaction values with
+  default-currency totals.
 * Reporting APIs read projections only, never the ledger directly.
 
 ---
@@ -411,18 +437,26 @@ events still verify.
 ## 12. Policy Engine & Admin Console
 
 * Policies are versioned JSON documents (thresholds, role permissions, multi-party
-  matrices, ABAC conditions) stored in `policies`, activated by a signed
-  `POLICY_CHANGED` ledger event that itself requires multi-party approval. The
-  active policy hash is served to clients so the local policy engine (app plan §10)
-  evaluates the *same* document.
+  matrices, ABAC conditions, and the enterprise `default_currency`) stored in
+  `policies`, activated by a signed `POLICY_CHANGED` ledger event that itself
+  requires multi-party approval. The active policy hash is served to clients so
+  the local policy engine (app plan §10) evaluates the *same* document.
+  Each accepted default-currency policy state also produces a signed
+  default-currency snapshot id/hash derived from the policy id, policy hash,
+  currency code, and effective ledger sequence. Monetary event `exchange_rate`
+  values must reference that snapshot so later audits can prove which default
+  currency and policy basis were used.
 * Engine: a small pure-function interpreter over the document
   (`evaluate(policy, event, context) → allow | deny | require_approvals[]`).
   Deliberately not a general-purpose language in v1 — auditable over expressive.
 * **Admin console** (`admin-ui/`): minimal internal React app served only on the admin
   listener, mTLS with admin certs. Screens: devices (enroll/revoke/quarantine),
   executives & keys, recovery ceremonies, conflicts, checkpoint & chain-verification
-  status, audit log search, policy versions. Every admin action goes through the same
-  signed-event machinery — the console has no side door to the database.
+  status, audit log search, policy versions, and default currency. The default
+  currency control is a policy edit, not a database setting; it shows pending vs.
+  accepted states and lands only after the signed `POLICY_CHANGED` event is
+  accepted. Every admin action goes through the same signed-event machinery — the
+  console has no side door to the database.
 
 ---
 

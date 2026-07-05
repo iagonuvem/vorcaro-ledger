@@ -30,10 +30,20 @@ test("ledger migration creates strict authoritative schema with generated routin
     assert.equal(version.user_version, 1);
 
     const routing = database
-      .prepare("SELECT account_id, entity_id FROM ledger_events WHERE id = ?")
+      .prepare(
+        `SELECT
+          account_id, entity_id, transaction_currency, exchange_rate,
+          default_currency_snapshot_id, local_rate
+        FROM ledger_events
+        WHERE id = ?`
+      )
       .get("evt_01JTEST0000000000000000000");
     assert.equal(routing.account_id, "acct_01JTEST000000000000000000");
     assert.equal(routing.entity_id, "ent_01JTEST0000000000000000000");
+    assert.equal(routing.transaction_currency, "USD");
+    assert.equal(routing.exchange_rate, "1");
+    assert.equal(routing.default_currency_snapshot_id, "ccysnap_test_usd");
+    assert.equal(routing.local_rate, 125000);
 
     assert.throws(
       () =>
@@ -215,7 +225,7 @@ function seedLedgerRows(database) {
       0,
       'account',
       'acct_01JTEST000000000000000000',
-      '{"account_id":"acct_01JTEST000000000000000000","entity_id":"ent_01JTEST0000000000000000000"}',
+      '{"account_id":"acct_01JTEST000000000000000000","entity_id":"ent_01JTEST0000000000000000000","transaction_currency":"USD","exchange_rate":"1","default_currency_snapshot_id":"ccysnap_test_usd","local_rate":125000}',
       X'001122',
       'sha256:1111111111111111111111111111111111111111111111111111111111111111',
       'sha256:0000000000000000000000000000000000000000000000000000000000000000',

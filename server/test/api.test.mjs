@@ -102,6 +102,7 @@ test("event submission validation accepts JSON string integers only at known big
   assert.equal(typeof parsed.base_server_sequence, "bigint");
   assert.equal(typeof parsed.device_event_counter, "bigint");
   assert.equal(typeof parsed.policy_metadata.amount_minor_units, "bigint");
+  assert.equal(typeof parsed.policy_metadata.local_rate, "bigint");
   assert.equal(parsed.event_id, "evt_api_parse");
 
   assert.throws(
@@ -250,7 +251,11 @@ function makeEvent(options) {
         account_id: options.objectId ?? "acct_default",
         entity_id: "ent_1",
         amount_minor_units: 1000n,
-        currency: "USD"
+        currency: "USD",
+        default_currency_snapshot_id: "ccysnap_test_usd",
+        exchange_rate: "1",
+        local_rate: 1000n,
+        transaction_currency: "USD"
       },
       payload_hash: payloadHash(payload),
       encrypted_payload: payload

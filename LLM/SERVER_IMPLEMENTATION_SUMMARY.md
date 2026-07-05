@@ -20,6 +20,8 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 
 - Created the pnpm workspace package `packages/protocol` with strict TypeScript build, lint, and test scripts.
 - Implemented strict zod schemas for the shared entities described in `LLM/COMMON_TYPES.md`, including ledger envelopes, acknowledgements, checkpoints, identity, policy, finance views, audit entries, and AI insights.
+- Extended policy metadata for monetary events with `transaction_currency`, decimal-string `exchange_rate`, `default_currency_snapshot_id`, and integer-minor-unit `local_rate`; incomplete monetary metadata is rejected by protocol validation.
+- Added `default_currency` to policy documents so the admin policy activation flow is the source of truth for the enterprise reporting/threshold currency.
 - Implemented canonical byte generation for client-signed event envelopes, server acknowledgements, and checkpoints.
 - Implemented Ed25519 signing and verification helpers using `sodium-native`.
 - Implemented SHA-256 helpers, payload hashing, and the server ledger hash rule from `LLM/SERVER_IMPLEMENTATION_PLAN.md` §4.
@@ -28,6 +30,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Created the `server` workspace package and wired it to import `@vorcaro/protocol`.
 - Added initial `ledger.db` migration under `server/migrations/ledger/0001_initial.sql`, matching `LLM/DATABASE_OVERVIEW.md` §4 for ledger, identity, PKI state, recovery, policies, audit, AI insights, checkpoints, snapshots, and append-only triggers.
 - Added initial `projections.db` migration under `server/migrations/projections/0001_initial.sql`, matching `LLM/DATABASE_OVERVIEW.md` §5 for rebuildable read models.
+- Added ledger generated columns for `transaction_currency`, `exchange_rate`, `default_currency_snapshot_id`, and `local_rate`, plus policy table columns for default-currency snapshot id/hash.
 - Added server database initialization helpers that apply the required SQLite PRAGMAs and migrations.
 - Added database tests covering generated routing columns, STRICT-table enforcement, append-only trigger rejection for UPDATE/DELETE, allowed updates for `object_heads` and `devices`, projection schema creation, and read-only `query_only` connections.
 - Added `LedgerAppender`, an in-process serialized append worker that implements idempotency, enrolled-device/fingerprint checks, active-executive binding, replay counter checks, key-window signature verification, encrypted payload hashing, conflict detection, gapless sequence assignment, ledger hash chaining, signed server acknowledgements, `object_heads` updates, and device replay-watermark updates.
@@ -62,7 +65,8 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Added section §11 tests covering KMS wrapping/rewrapping/signing and a full threshold recovery drill with bad-signature rejection, key-package rewrap, old key revocation window, new key activation, signed acknowledgements, append-only ledger evidence, and recovery audit entries.
 - Added `PolicyEngine`, a deliberately small pure interpreter for versioned policy documents: role/object/action permissions, a closed condition set, and threshold approval rules.
 - Added `PolicyService`, which activates a policy only after a signed `POLICY_CHANGED` event is accepted by `LedgerAppender`, then stores the active document and writes admin audit evidence.
-- Wired `LedgerAppender` to evaluate the active policy after signature/payload validation and before conflict handling, appending denied events as `POLICY_DENIED` and approval-required events as `pending` with `APPROVALS_REQUIRED`.
+- Added deterministic default-currency snapshot id/hash derivation from policy id, policy hash, default currency, and effective ledger sequence; monetary events must reference the active snapshot id for auditability.
+- Wired `LedgerAppender` to evaluate the active policy after signature/payload validation and before conflict handling, appending denied events as `POLICY_DENIED` and approval-required events as `pending` with `APPROVALS_REQUIRED`; policy thresholds now compare the converted default-currency value derived from `local_rate` and `exchange_rate`.
 - Expanded the admin API with read surfaces for devices, executives, recovery ceremonies, conflicts, checkpoints, audit log, and policies, plus signed-action hooks for policy activation and recovery ceremonies.
 - Added the dependency-free internal `admin-ui/` console using the `DESIGN.md` dark, quiet, typographic system with semantic status treatment and compact tables for devices, executives, recovery, conflicts, checkpoints, audit, and policies.
 - Added section §12 tests covering policy allow/deny/approval decisions, signed policy activation, policy hash rejection, and appender policy enforcement.
@@ -100,6 +104,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - The §9 implementation blocks all new ledger writes to a conflicted object until `CONFLICT_RESOLVED` lands. The later full policy engine can narrow this to the plan's material-action rule when read/annotation event types exist.
 - The §10 snapshot worker currently accepts a 32-byte snapshot encryption key directly. Later KMS work must unwrap/provide that key from the HSM boundary; snapshot bodies are already encrypted before leaving process memory for object storage.
 - The §10 projection worker covers account, cash-position, and conflict read models needed by the current implemented event surface. Transaction, budget, approval, and richer account fields should be filled when the corresponding decrypted payload schemas and policy/KMS path exist.
+- Multi-currency projection columns are present in `projections.db` and snapshot bodies, but the current projection worker only has account/cash-position coverage; transaction/budget/approval projections should populate default-currency totals when those decrypted payload folds are implemented.
 - The §11 KMS implementation is local/test-only. Production must implement the same `KeyManagementService` interface against PKCS#11/SoftHSM or hardware HSM handles.
 - The §11 recovery service requires real client-signed `RECOVERY_PERFORMED` and `KEY_ROTATED` envelopes from the executing recovery officer device before it appends recovery evidence. Network route wiring remains with the admin/recovery API work.
 - Existing appender, PKI, and snapshot services still accept direct server signing/encryption key material from earlier steps; production HSM retrofit should move those call sites onto the KMS handle boundary introduced in §11.

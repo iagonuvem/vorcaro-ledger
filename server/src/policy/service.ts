@@ -27,6 +27,9 @@ export type ActivatePolicyResult = {
 type PolicySummaryRow = {
   readonly id: string;
   readonly version: number;
+  readonly default_currency: string;
+  readonly default_currency_snapshot_id: string | null;
+  readonly default_currency_snapshot_hash: string | null;
   readonly document_hash: string;
   readonly activated_at_sequence: number | null;
 };
@@ -38,6 +41,9 @@ type PolicyDocumentRow = {
 export type PolicySummary = {
   readonly id: string;
   readonly version: number;
+  readonly default_currency: string;
+  readonly default_currency_snapshot_id: string | null;
+  readonly default_currency_snapshot_hash: string | null;
   readonly document_hash: string;
   readonly activated_at_sequence: bigint | null;
 };
@@ -78,16 +84,21 @@ export class PolicyService {
       ...policy,
       activated_at_sequence: acknowledgement.server_sequence
     });
+    const defaultCurrencySnapshot = PolicyEngine.defaultCurrencySnapshot(activatedPolicy);
 
     this.database
       .prepare(
         `INSERT INTO policies (
-          id, version, document, document_hash, activated_at_sequence
-        ) VALUES (?, ?, ?, ?, ?)`
+          id, version, default_currency, default_currency_snapshot_id,
+          default_currency_snapshot_hash, document, document_hash, activated_at_sequence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         activatedPolicy.id,
         activatedPolicy.version,
+        activatedPolicy.default_currency,
+        defaultCurrencySnapshot.id,
+        defaultCurrencySnapshot.hash,
         PolicyEngine.serializePolicyDocument(activatedPolicy),
         activatedPolicy.document_hash,
         PolicyService.toSqlInteger(acknowledgement.server_sequence)
@@ -99,6 +110,8 @@ export class PolicyService {
         event: "policy_activated",
         policy_id: activatedPolicy.id,
         policy_version: activatedPolicy.version,
+        default_currency: activatedPolicy.default_currency,
+        default_currency_snapshot_id: defaultCurrencySnapshot.id,
         activated_at_sequence: acknowledgement.server_sequence.toString(10)
       },
       createdAt: this.now()
@@ -115,6 +128,7 @@ export class PolicyService {
       this.database
         .prepare(
           `SELECT id, version, document_hash, activated_at_sequence
+          , default_currency, default_currency_snapshot_id, default_currency_snapshot_hash
           FROM policies
           ORDER BY version DESC`
         )
@@ -122,6 +136,9 @@ export class PolicyService {
     ).map((row) => ({
       id: row.id,
       version: row.version,
+      default_currency: row.default_currency,
+      default_currency_snapshot_id: row.default_currency_snapshot_id,
+      default_currency_snapshot_hash: row.default_currency_snapshot_hash,
       document_hash: row.document_hash,
       activated_at_sequence: row.activated_at_sequence === null ? null : BigInt(row.activated_at_sequence)
     }));
@@ -148,7 +165,7 @@ export class PolicyService {
       throw new PolicyError("SCHEMA_INVALID");
     }
 
-    if (event.policy_metadata.amount_minor_units !== undefined) {
+    if (Object.keys(event.policy_metadata).length !== 0) {
       throw new PolicyError("SCHEMA_INVALID");
     }
   }

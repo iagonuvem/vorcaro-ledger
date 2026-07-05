@@ -62,6 +62,9 @@ type CashRow = {
   readonly entity_id: string;
   readonly currency: string;
   readonly total_minor_units: number;
+  readonly default_currency: string | null;
+  readonly default_total_minor_units: number | null;
+  readonly default_currency_snapshot_id: string | null;
   readonly pending_delta_minor_units: number;
   readonly as_of_sequence: number;
 };
@@ -206,6 +209,8 @@ export class SnapshotWorker {
         .prepare(
           `SELECT
             entity_id, currency, total_minor_units,
+            default_currency, default_total_minor_units,
+            default_currency_snapshot_id,
             pending_delta_minor_units, as_of_sequence
           FROM proj_cash_position
           ORDER BY entity_id ASC, currency ASC`
@@ -215,6 +220,9 @@ export class SnapshotWorker {
       entity_id: row.entity_id,
       currency: row.currency,
       total_minor_units: row.total_minor_units,
+      default_currency: row.default_currency,
+      default_total_minor_units: row.default_total_minor_units,
+      default_currency_snapshot_id: row.default_currency_snapshot_id,
       pending_delta_minor_units: row.pending_delta_minor_units,
       as_of_sequence: row.as_of_sequence
     }));
