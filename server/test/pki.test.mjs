@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -16,6 +16,7 @@ import {
 
 import {
   LocalCertificateAuthority,
+  OpenSslCertificateAuthority,
   PkiError,
   PkiService,
   openLedgerDatabase
@@ -160,6 +161,69 @@ test("device revocation updates device state and writes signed revocation list v
   } finally {
     database.close();
     cleanup();
+  }
+});
+
+test("OpenSSL certificate authority issues client-auth device certificates", () => {
+  const directory = mkdtempSync(join(tmpdir(), "vorcaro-openssl-ca-"));
+  const caKeyFile = join(directory, "device-client-ca.key.pem");
+  const caCertFile = join(directory, "device-client-ca.pem");
+  const certFile = join(directory, "device.cert.pem");
+  const revocationLogFile = join(directory, "revocations.jsonl");
+
+  try {
+    OpenSslCertificateAuthority.openssl([
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-sha256",
+      "-days",
+      "2",
+      "-nodes",
+      "-keyout",
+      caKeyFile,
+      "-out",
+      caCertFile,
+      "-subj",
+      "/O=Vorcaro Enterprises/CN=Test Device Client CA"
+    ]);
+    const ca = new OpenSslCertificateAuthority({
+      caKeyFile,
+      caCertFile,
+      revocationLogFile
+    });
+    const issued = ca.issueDeviceCertificate({
+      executiveId: "exec_1",
+      deviceId: "dev_new",
+      publicKey: deviceKeys.publicKey,
+      challengeId: "enr_test",
+      issuedAt: "2026-07-01T15:00:00.000Z",
+      expiresAt: "2026-07-08T15:00:00.000Z"
+    });
+
+    writeFileSync(certFile, issued.certificatePem);
+    const purpose = OpenSslCertificateAuthority.openssl(["x509", "-in", certFile, "-noout", "-purpose"]);
+
+    assert.match(issued.certificatePem, /BEGIN CERTIFICATE/);
+    assert.equal(issued.certificateFingerprint, OpenSslCertificateAuthority.fingerprint(certFile));
+    assert.match(purpose, /SSL client : Yes/);
+
+    ca.revokeDeviceCertificate({
+      deviceId: "dev_new",
+      certificateFingerprint: issued.certificateFingerprint,
+      revokedAt: "2026-07-01T15:10:00.000Z",
+      reason: "test"
+    });
+
+    assert.deepEqual(JSON.parse(readFileSync(revocationLogFile, "utf8").trim()), {
+      device_id: "dev_new",
+      certificate_fingerprint: issued.certificateFingerprint,
+      revoked_at: "2026-07-01T15:10:00.000Z",
+      reason: "test"
+    });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });
 

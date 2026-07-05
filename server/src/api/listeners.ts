@@ -5,14 +5,17 @@ export type MtlsServerOptions = ServerOptions & {
   readonly key: ServerOptions["key"];
   readonly cert: ServerOptions["cert"];
   readonly ca: ServerOptions["ca"];
+  readonly allowUnauthorizedClients?: boolean;
 };
 
 export function buildMtlsServerOptions(options: MtlsServerOptions): ServerOptions {
+  const { allowUnauthorizedClients: _allowUnauthorizedClients, ...serverOptions } = options;
+
   return {
-    ...options,
+    ...serverOptions,
     minVersion: "TLSv1.3",
     requestCert: true,
-    rejectUnauthorized: true
+    rejectUnauthorized: options.allowUnauthorizedClients === true ? false : true
   };
 }
 

@@ -56,6 +56,10 @@ local bootstrap mTLS certificates, a server signing key, and initializes the
 SQLite files when the local server build is already present. Existing files are
 preserved unless `VORCARO_FORCE=1` is set.
 
+The runtime uses `/etc/vorcaro/certs/device-client-ca.key.pem` and
+`/etc/vorcaro/certs/device-client-ca.pem` to issue short-lived device client
+certificates during `/v1/enroll/*`.
+
 If required host dependencies are missing, `server/bootstrap.sh` calls
 `server/setup.sh` to install Node.js, pnpm, OpenSSL, Docker, and Docker Compose
 v2 on supported Linux distributions. `server/setup.sh` also prepares the

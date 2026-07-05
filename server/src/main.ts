@@ -8,6 +8,8 @@ import { createDeviceApiApp } from "./api/device-api.js";
 import { createMtlsHttpsServer, type MtlsServerOptions } from "./api/listeners.js";
 import { openLedgerDatabase, openProjectionsDatabase } from "./db/sqlite.js";
 import { LedgerAppender } from "./ledger/appender.js";
+import { OpenSslCertificateAuthority } from "./pki/authority.js";
+import { PkiService } from "./pki/enrollment.js";
 import { PolicyService } from "./policy/service.js";
 
 export type RuntimeConfig = {
@@ -20,10 +22,14 @@ export type RuntimeConfig = {
   readonly deviceServerKeyFile: string;
   readonly deviceServerCertFile: string;
   readonly deviceClientCaFile: string;
+  readonly deviceClientCaKeyFile: string;
   readonly adminServerKeyFile: string;
   readonly adminServerCertFile: string;
   readonly adminClientCaFile: string;
   readonly adminUiPath: string | null;
+  readonly caRevocationLogFile: string;
+  readonly deviceCertificateLifetimeDays: number;
+  readonly enrollmentChallengeLifetimeMinutes: number;
 };
 
 export class VorcaroServerRuntime {
@@ -55,22 +61,36 @@ export class VorcaroServerRuntime {
         database: this.ledgerDatabase,
         appender: this.appender
       });
+      const pkiService = new PkiService({
+        database: this.ledgerDatabase,
+        certificateAuthority: new OpenSslCertificateAuthority({
+          caKeyFile: config.deviceClientCaKeyFile,
+          caCertFile: config.deviceClientCaFile,
+          revocationLogFile: config.caRevocationLogFile
+        }),
+        serverSigningSecretKey,
+        deviceCertificateLifetimeDays: config.deviceCertificateLifetimeDays,
+        enrollmentChallengeLifetimeMinutes: config.enrollmentChallengeLifetimeMinutes
+      });
       this.deviceServer = createMtlsHttpsServer(
         createDeviceApiApp({
           database: this.ledgerDatabase,
           appender: this.appender,
-          serverSigningSecretKey
+          serverSigningSecretKey,
+          pkiService
         }),
         VorcaroServerRuntime.tlsOptions({
           keyFile: config.deviceServerKeyFile,
           certFile: config.deviceServerCertFile,
-          caFile: config.deviceClientCaFile
+          caFile: config.deviceClientCaFile,
+          allowUnauthorizedClients: true
         })
       );
       this.adminServer = createMtlsHttpsServer(
         createAdminApiApp({
           database: this.ledgerDatabase,
           policyService,
+          pkiService,
           ...(config.adminUiPath === null ? {} : { adminUiPath: config.adminUiPath })
         }),
         VorcaroServerRuntime.tlsOptions({
@@ -143,13 +163,25 @@ export class VorcaroServerRuntime {
         environment.VORCARO_DEVICE_SERVER_CERT_FILE ?? join(certDir, "device-server.cert.pem"),
       deviceClientCaFile:
         environment.VORCARO_DEVICE_CLIENT_CA_FILE ?? join(certDir, "device-client-ca.pem"),
+      deviceClientCaKeyFile:
+        environment.VORCARO_DEVICE_CLIENT_CA_KEY_FILE ?? join(certDir, "device-client-ca.key.pem"),
       adminServerKeyFile:
         environment.VORCARO_ADMIN_SERVER_KEY_FILE ?? join(certDir, "admin-server.key.pem"),
       adminServerCertFile:
         environment.VORCARO_ADMIN_SERVER_CERT_FILE ?? join(certDir, "admin-server.cert.pem"),
       adminClientCaFile:
         environment.VORCARO_ADMIN_CLIENT_CA_FILE ?? join(certDir, "admin-client-ca.pem"),
-      adminUiPath: environment.VORCARO_ADMIN_UI_PATH ?? "/app/admin-ui"
+      adminUiPath: environment.VORCARO_ADMIN_UI_PATH ?? "/app/admin-ui",
+      caRevocationLogFile:
+        environment.VORCARO_CA_REVOCATION_LOG_FILE ?? join(dataDir, "device-ca-revocations.log"),
+      deviceCertificateLifetimeDays: VorcaroServerRuntime.envPositiveInteger(
+        environment.VORCARO_DEVICE_CERTIFICATE_LIFETIME_DAYS,
+        7
+      ),
+      enrollmentChallengeLifetimeMinutes: VorcaroServerRuntime.envPositiveInteger(
+        environment.VORCARO_ENROLLMENT_CHALLENGE_LIFETIME_MINUTES,
+        10
+      )
     });
   }
 
@@ -165,11 +197,15 @@ export class VorcaroServerRuntime {
     readonly keyFile: string;
     readonly certFile: string;
     readonly caFile: string;
+    readonly allowUnauthorizedClients?: boolean;
   }): MtlsServerOptions {
     return {
       key: readFileSync(input.keyFile),
       cert: readFileSync(input.certFile),
-      ca: readFileSync(input.caFile)
+      ca: readFileSync(input.caFile),
+      ...(input.allowUnauthorizedClients === undefined
+        ? {}
+        : { allowUnauthorizedClients: input.allowUnauthorizedClients })
     };
   }
 
@@ -185,6 +221,19 @@ export class VorcaroServerRuntime {
     const parsed = Number(raw);
     if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
       throw new Error(`Invalid port: ${raw}`);
+    }
+
+    return parsed;
+  }
+
+  static envPositiveInteger(raw: string | undefined, fallback: number): number {
+    if (raw === undefined) {
+      return fallback;
+    }
+
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      throw new Error(`Invalid positive integer: ${raw}`);
     }
 
     return parsed;

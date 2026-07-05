@@ -67,6 +67,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Added the dependency-free internal `admin-ui/` console using the `DESIGN.md` dark, quiet, typographic system with semantic status treatment and compact tables for devices, executives, recovery, conflicts, checkpoints, audit, and policies.
 - Added section §12 tests covering policy allow/deny/approval decisions, signed policy activation, policy hash rejection, and appender policy enforcement.
 - Added a production runtime entrypoint (`server/src/main.ts`) that opens host-mounted SQLite databases, acquires an atomic data-directory lock, wires the appender/policy/admin/device services, starts the two TLS 1.3 mTLS listeners, serves the static admin console, and gracefully drains/checkpoints on shutdown.
+- Wired the Docker runtime PKI enrollment path to an OpenSSL-backed device-client CA adapter, exposed admin one-time enrollment-token issuance, and allowed the planned pre-certificate enrollment exception on the device TLS listener while keeping all non-enrollment device routes identity-gated.
 - Added a container healthcheck command (`server/src/healthcheck.ts`) with mTLS endpoint checking when healthcheck client certs are configured and filesystem readiness fallback for local containers.
 - Added `Dockerfile`, `.dockerignore`, and `docker-compose.yml` with a non-root runtime user, read-only root filesystem, `/var/lib/vorcaro` data mount, certificate/secret mounts, published `8443`/`9443` listeners, and optional `step-ca`/MinIO profiles.
 - Added `LLM/DOCKER_OPERATIONS.md` with host path layout, expected certificate/secret files, run commands, and safety rules.
@@ -75,6 +76,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Added `server/setup.sh`, a root-run dependency installer for supported Linux distributions and host-layout preparer for Docker bind mounts, including macOS `/private/var/lib/vorcaro` and `/private/etc/vorcaro`; `bootstrap.sh` invokes it when Node.js, pnpm, OpenSSL, Docker, or Docker Compose v2 is missing.
 - Added `server/README.md` with from-scratch bootstrap, Docker Compose runtime, macOS Docker Desktop bind-mount guidance, local development, environment variable, healthcheck, and common startup failure guidance for the server package.
 - Added `server/docs/HOW_TO_ADD_EXECUTIVE.md` with the current operator procedure for registering a new executive signing public key in the server database and verifying it through the admin API.
+- Added `server/docs/HOW_TO_ENROLL_DEVICE.md` with the operator/client flow for admin token issuance, enrollment challenge, device proof, executive-signed `DEVICE_ENROLLED` submission, and verification.
 
 ## Verification
 

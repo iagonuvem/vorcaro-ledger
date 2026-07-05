@@ -171,6 +171,19 @@ test("TLS listener options enforce mandatory TLS 1.3 mTLS", () => {
   assert.equal(options.rejectUnauthorized, true);
 });
 
+test("TLS listener options can allow the pre-certificate enrollment exception", () => {
+  const options = buildMtlsServerOptions({
+    key: "key",
+    cert: "cert",
+    ca: "ca",
+    allowUnauthorizedClients: true
+  });
+
+  assert.equal(options.minVersion, "TLSv1.3");
+  assert.equal(options.requestCert, true);
+  assert.equal(options.rejectUnauthorized, false);
+});
+
 function createDatabaseFixture() {
   const directory = mkdtempSync(join(tmpdir(), "vorcaro-api-"));
   const database = openLedgerDatabase({ path: join(directory, "ledger.db") });

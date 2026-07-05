@@ -19,10 +19,6 @@ services:
       - /var/lib/vorcaro:/var/lib/vorcaro
       - /etc/vorcaro/certs:/etc/vorcaro/certs:ro
       - /etc/vorcaro/secrets:/etc/vorcaro/secrets:ro
-    # volumes: # MACOS Usage
-    #   - ./var/vorcaro:/var/lib/vorcaro
-    #   - ./var/vorcaro-certs:/etc/vorcaro/certs:ro
-    #   - ./var/vorcaro-secrets:/etc/vorcaro/secrets:ro
 
     environment:
       VORCARO_DATA_DIR: /var/lib/vorcaro

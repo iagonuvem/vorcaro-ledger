@@ -21,7 +21,12 @@ export {
   createMtlsHttpsServer,
   type MtlsServerOptions
 } from "./api/listeners.js";
-export { LocalCertificateAuthority, type CertificateAuthority } from "./pki/authority.js";
+export {
+  LocalCertificateAuthority,
+  OpenSslCertificateAuthority,
+  type CertificateAuthority,
+  type OpenSslCertificateAuthorityOptions
+} from "./pki/authority.js";
 export {
   PkiError,
   PkiService,

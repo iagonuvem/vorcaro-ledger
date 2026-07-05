@@ -6,7 +6,9 @@ activation surface, and the static admin console runtime hook.
 
 Detailed operator guides live in [server/docs](docs).
 Start with [How To Add An Executive Key](docs/HOW_TO_ADD_EXECUTIVE.md)
-when adding an executive signing key to the server.
+when adding an executive signing key to the server, and
+[How To Enroll A Device](docs/HOW_TO_ENROLL_DEVICE.md) when enrolling an
+executive device.
 
 The normal deployment shape is:
 
@@ -294,12 +296,18 @@ VORCARO_SERVER_SIGNING_SECRET_KEY_FILE   default $VORCARO_SECRET_DIR/server-sign
 VORCARO_DEVICE_SERVER_KEY_FILE           default $VORCARO_CERT_DIR/device-server.key.pem
 VORCARO_DEVICE_SERVER_CERT_FILE          default $VORCARO_CERT_DIR/device-server.cert.pem
 VORCARO_DEVICE_CLIENT_CA_FILE            default $VORCARO_CERT_DIR/device-client-ca.pem
+VORCARO_DEVICE_CLIENT_CA_KEY_FILE        default $VORCARO_CERT_DIR/device-client-ca.key.pem
 VORCARO_ADMIN_SERVER_KEY_FILE            default $VORCARO_CERT_DIR/admin-server.key.pem
 VORCARO_ADMIN_SERVER_CERT_FILE           default $VORCARO_CERT_DIR/admin-server.cert.pem
 VORCARO_ADMIN_CLIENT_CA_FILE             default $VORCARO_CERT_DIR/admin-client-ca.pem
+VORCARO_CA_REVOCATION_LOG_FILE           default $VORCARO_DATA_DIR/device-ca-revocations.log
+VORCARO_DEVICE_CERTIFICATE_LIFETIME_DAYS default 7
+VORCARO_ENROLLMENT_CHALLENGE_LIFETIME_MINUTES default 10
 ```
 
 The default Compose file already supplies the durable path variables.
+The device enrollment routes use the mounted device-client CA key and cert to
+issue short-lived client certificates.
 
 ## Verify The Server
 

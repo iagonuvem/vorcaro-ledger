@@ -6,7 +6,7 @@ import { policyDocumentSchema } from "@vorcaro/protocol";
 
 import { createErrorHandler, parseEventSubmission } from "./device-api.js";
 import { sendJson } from "./json.js";
-import type { PkiService } from "../pki/enrollment.js";
+import { PkiService } from "../pki/enrollment.js";
 import { PolicyError } from "../policy/engine.js";
 import type { PolicyService } from "../policy/service.js";
 import type { RecoveryService } from "../recovery/service.js";
@@ -17,6 +17,7 @@ export type AdminApiOptions = {
   readonly policyService?: PolicyService;
   readonly recoveryService?: RecoveryService;
   readonly adminUiPath?: string;
+  readonly now?: () => string;
 };
 
 type DeviceRow = {
@@ -121,9 +122,18 @@ const executeRecoveryBodySchema = z
     key_rotated_event: z.unknown()
   })
   .strict();
+const issueEnrollmentTokenBodySchema = z
+  .object({
+    executive_id: z.string().min(1),
+    issued_by: z.string().min(1).default("admin"),
+    expires_at: z.string().datetime({ offset: true }).optional(),
+    ttl_minutes: z.number().int().positive().max(1_440).default(60)
+  })
+  .strict();
 
 export function createAdminApiApp(options: AdminApiOptions = {}): express.Express {
   const app = express();
+  const now = options.now ?? (() => new Date().toISOString());
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb", strict: true }));
 
@@ -172,6 +182,22 @@ export function createAdminApiApp(options: AdminApiOptions = {}): express.Expres
     }
 
     sendJson(response, 200, { executives: readExecutives(options.database) });
+  });
+
+  app.post("/admin/v1/enrollment-tokens", (request, response) => {
+    if (options.pkiService === undefined) {
+      sendJson(response, 501, { error_code: "POLICY_DENIED" });
+      return;
+    }
+
+    const body = issueEnrollmentTokenBodySchema.parse(request.body);
+    sendJson(response, 201, {
+      enrollment_token: options.pkiService.issueEnrollmentToken({
+        executiveId: body.executive_id,
+        issuedBy: body.issued_by,
+        expiresAt: body.expires_at ?? PkiService.addMinutes(now(), body.ttl_minutes)
+      })
+    });
   });
 
   app.get("/admin/v1/recovery/ceremonies", (_request, response) => {

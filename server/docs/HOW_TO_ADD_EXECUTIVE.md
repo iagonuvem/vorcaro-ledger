@@ -222,10 +222,11 @@ key_version: 1
 Registering the executive key does not enroll a device by itself. Devices still
 need certificate enrollment before they can submit events over mTLS.
 
-The codebase already has the PKI service and `/v1/enroll/*` route shape, but
-the current Docker runtime does not yet wire the production CA service into
-those routes. Until that operational wiring exists, treat device enrollment as
-not production-ready.
+The Docker runtime wires the PKI service to the mounted device-client CA, so an
+admin can issue a one-time enrollment token and the executive device can use
+`/v1/enroll/begin` and `/v1/enroll/complete`.
+
+See [How To Enroll A Device](HOW_TO_ENROLL_DEVICE.md).
 
 ## Safety Checklist
 

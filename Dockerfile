@@ -23,7 +23,10 @@ ENV VORCARO_DATA_DIR=/var/lib/vorcaro
 ENV VORCARO_CERT_DIR=/etc/vorcaro/certs
 ENV VORCARO_SECRET_DIR=/etc/vorcaro/secrets
 
-RUN groupadd --system --gid 10001 vorcaro \
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --system --gid 10001 vorcaro \
   && useradd --system --uid 10001 --gid vorcaro --home-dir /nonexistent --shell /usr/sbin/nologin vorcaro \
   && mkdir -p /var/lib/vorcaro /etc/vorcaro/certs /etc/vorcaro/secrets \
   && chown -R vorcaro:vorcaro /var/lib/vorcaro
