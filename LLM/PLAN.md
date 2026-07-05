@@ -247,7 +247,7 @@ There is a tension the design must resolve explicitly rather than by accident: e
 Two consequences must be stated honestly:
 
 * This is **not** end-to-end encryption between executives. A fully compromised server can read finance data. The mitigations are the ones already in this plan: HSM-held keys, immutable audit, checkpoint anchoring (below), and Vorcaro owning the infrastructure.
-* Every event also carries **plaintext-signed routing metadata** (`event_type`, `object_type`, `object_id`, `base_server_sequence`, amounts for threshold policy) so that certificate checks, replay protection, and coarse policy can run before decryption, and so the hash chain covers fields clients can verify without payload access.
+* Every event also carries **plaintext-signed routing metadata** (`event_type`, `object_type`, `object_id`, `base_server_sequence`, account/entity identifiers, and monetary fields for threshold policy) so that certificate checks, replay protection, and coarse policy can run before decryption, and so the hash chain covers fields clients can verify without payload access. For monetary events this metadata must include the original transaction currency and immutable conversion basis described in §6.
 
 If a future version demands true E2E encryption, the server loses policy enforcement, conflict semantics, reporting, and server-side AI — those would have to move client-side or into enclaves. That trade is out of scope for version one and should be a deliberate decision, never a drift.
 
@@ -418,6 +418,14 @@ Instead of mutating financial records directly, all changes become signed events
   "device_event_counter": 4471,
   "object_type": "payment_approval",
   "object_id": "pay_9921",
+  "policy_metadata": {
+    "account_id": "acct_01J...",
+    "entity_id": "ent_01J...",
+    "transaction_currency": "EUR",
+    "exchange_rate": "1.08750000",
+    "default_currency_snapshot_id": "ccysnap_01J...",
+    "local_rate": 125000
+  },
   "payload_hash": "sha256:...",
   "encrypted_payload": "...",
   "signature": "...",
@@ -436,6 +444,35 @@ Two supporting rules:
 * `event_id` (ULID) doubles as the idempotency key — resubmitting after a dropped acknowledgement must not double-append.
 * `device_event_counter` is a per-device monotonic counter. The server rejects non-increasing counters, which makes replay protection concrete instead of aspirational.
 * Policy decisions (thresholds, approval windows) use `server_timestamp`. `client_timestamp` is recorded but never trusted for governance — laptop clocks are evidence, not authority.
+
+### Currency Rules
+
+Vorcaro Enterprises has one active **default currency** for enterprise reporting
+and policy threshold evaluation. It is configured in the admin UI as part of the
+versioned active policy document and is activated only through the same signed
+`POLICY_CHANGED` flow as any other policy change. Changing the default currency
+does not rewrite historical ledger events. Each accepted default-currency policy
+state produces a signed default-currency snapshot id/hash derived from the policy
+id, policy hash, currency code, and effective ledger sequence.
+
+Every ingested monetary event must preserve the currency reality at the time of
+the transaction:
+
+* `transaction_currency`: ISO 4217 currency code for the original transaction.
+* `exchange_rate`: decimal string converting `transaction_currency` into the
+  active default currency at event creation time. It is required even when both
+  currencies match, in which case the value is `"1"`.
+* `default_currency_snapshot_id`: the signed default-currency snapshot used as
+  the conversion basis for `exchange_rate`. It points auditors to the exact
+  policy currency state that was active when the event was created.
+* `local_rate`: the original local value in `transaction_currency`, represented
+  as integer minor units. No floating-point money is allowed.
+
+The encrypted payload may contain richer finance details, but it must agree with
+the plaintext-signed monetary metadata. Policy thresholds are evaluated against
+the default-currency converted value derived from these fields and the referenced
+default-currency snapshot, while reports must retain and display the original
+transaction currency alongside any default-currency totals.
 
 ### Event Categories
 
@@ -648,6 +685,7 @@ Require multi-party approval for:
 * Budget override.
 * Manual ledger correction.
 * Source-of-truth rollback.
+* Default currency change.
 * Export of sensitive finance data.
 * Policy changes.
 * Emergency access.
@@ -773,6 +811,7 @@ ledger_events
 - base_server_sequence    (client-signed; basis for conflict detection)
 - object_type
 - object_id
+- policy_metadata         (client-signed routing and monetary metadata)
 - encrypted_payload
 - payload_hash            (client-signed)
 - previous_ledger_hash    (server-assigned at append)

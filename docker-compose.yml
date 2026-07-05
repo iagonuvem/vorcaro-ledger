@@ -1,0 +1,45 @@
+services:
+  ledger-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vorcaro-ledger-server:0.1.0
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    user: "10001:10001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "8443:8443"
+      - "9443:9443"
+    volumes:
+      - /var/lib/vorcaro:/var/lib/vorcaro
+      - /etc/vorcaro/certs:/etc/vorcaro/certs:ro
+      - /etc/vorcaro/secrets:/etc/vorcaro/secrets:ro
+
+    environment:
+      VORCARO_DATA_DIR: /var/lib/vorcaro
+      VORCARO_CERT_DIR: /etc/vorcaro/certs
+      VORCARO_SECRET_DIR: /etc/vorcaro/secrets
+      VORCARO_ADMIN_UI_PATH: /app/admin-ui
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb
+
+  step-ca:
+    image: registry.vorcaro.internal/step-ca:pin-by-digest-in-prod
+    restart: unless-stopped
+    profiles: ["pki"]
+    volumes:
+      - /var/lib/vorcaro-ca:/home/step
+
+  minio:
+    image: registry.vorcaro.internal/minio:pin-by-digest-in-prod
+    restart: unless-stopped
+    profiles: ["object-storage"]
+    volumes:
+      - /var/lib/vorcaro-minio:/data

@@ -1,0 +1,11 @@
+.git
+.agents
+.codex
+node_modules
+**/node_modules
+**/dist
+coverage
+.DS_Store
+*.log
+LLM
+README.md

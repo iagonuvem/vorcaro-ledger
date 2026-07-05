@@ -134,6 +134,14 @@ CREATE TABLE ledger_events (
                           (json_extract(policy_metadata, '$.account_id')) STORED,
   entity_id             TEXT GENERATED ALWAYS AS
                           (json_extract(policy_metadata, '$.entity_id')) STORED,
+  transaction_currency  TEXT GENERATED ALWAYS AS
+                          (json_extract(policy_metadata, '$.transaction_currency')) STORED,
+  exchange_rate         TEXT GENERATED ALWAYS AS
+                          (json_extract(policy_metadata, '$.exchange_rate')) STORED,
+  default_currency_snapshot_id TEXT GENERATED ALWAYS AS
+                          (json_extract(policy_metadata, '$.default_currency_snapshot_id')) STORED,
+  local_rate            INTEGER GENERATED ALWAYS AS
+                          (json_extract(policy_metadata, '$.local_rate')) STORED,
   encrypted_payload     BLOB NOT NULL,
   payload_hash          TEXT NOT NULL,
   previous_ledger_hash  TEXT,                   -- server-assigned at append
@@ -142,6 +150,13 @@ CREATE TABLE ledger_events (
   server_signature      TEXT,
   status                TEXT NOT NULL CHECK (status IN
                           ('pending','accepted','rejected','conflicted','quarantined')),
+  error_code            TEXT CHECK (error_code IN
+                          ('CERT_REVOKED','CERT_UNKNOWN','EXECUTIVE_INACTIVE',
+                           'REPLAY_COUNTER','DUPLICATE_EVENT','BAD_SIGNATURE',
+                           'BAD_PAYLOAD_HASH','SCHEMA_INVALID','STALE_BASE',
+                           'CONFLICT','POLICY_DENIED','APPROVALS_REQUIRED',
+                           'UNKNOWN_ACCOUNT','ACCOUNT_CLOSED',
+                           'POLICY_VERSION_MISMATCH')),
   client_timestamp      TEXT NOT NULL,          -- recorded, never trusted for policy
   server_timestamp      TEXT NOT NULL,          -- authoritative (set by appender, UTC)
   accepted_at           TEXT,
@@ -169,6 +184,23 @@ CREATE TABLE object_heads (
   conflicted    INTEGER NOT NULL DEFAULT 0 CHECK (conflicted IN (0,1)),
   PRIMARY KEY (object_type, object_id)
 ) STRICT, WITHOUT ROWID;
+
+CREATE TABLE conflicts (                       -- mutable conflict working set
+  id                   TEXT PRIMARY KEY,       -- cfl_<hash>; derived state, not truth
+  object_type          TEXT NOT NULL,
+  object_id            TEXT NOT NULL,
+  event_ids            TEXT NOT NULL CHECK (json_valid(event_ids)),
+  detected_at_sequence INTEGER NOT NULL,
+  status               TEXT NOT NULL CHECK (status IN ('open','resolved')),
+  resolution_event_id  TEXT,
+  ai_proposal_id       TEXT,
+  created_at           TEXT NOT NULL,
+  resolved_at          TEXT
+) STRICT;
+
+CREATE UNIQUE INDEX idx_conflicts_one_open_object
+  ON conflicts (object_type, object_id)
+  WHERE status = 'open';
 ```
 
 ### 4.3 Identity & PKI (materialized state; changes driven by ledger events)
@@ -224,6 +256,18 @@ CREATE TABLE enrollment_tokens (                -- one-time, admin-issued (§8 o
   issued_by   TEXT NOT NULL,
   expires_at  TEXT NOT NULL,
   consumed_at TEXT
+) STRICT;
+
+CREATE TABLE enrollment_challenges (            -- short-lived pre-cert challenge
+  id           TEXT PRIMARY KEY,
+  token_hash   TEXT NOT NULL REFERENCES enrollment_tokens(token_hash),
+  executive_id TEXT NOT NULL REFERENCES executives(id),
+  device_id    TEXT NOT NULL,
+  public_key   TEXT NOT NULL,
+  challenge    TEXT NOT NULL,
+  expires_at   TEXT NOT NULL,
+  consumed_at  TEXT,
+  created_at   TEXT NOT NULL
 ) STRICT;
 
 CREATE TABLE revocation_list_versions (         -- append-only; served signed to clients
@@ -285,6 +329,9 @@ CREATE TABLE recovery_approvals (               -- append-only: an approval, onc
 CREATE TABLE policies (
   id                     TEXT PRIMARY KEY,
   version                INTEGER NOT NULL UNIQUE,
+  default_currency       TEXT NOT NULL,
+  default_currency_snapshot_id TEXT NOT NULL,
+  default_currency_snapshot_hash TEXT NOT NULL,
   document               TEXT NOT NULL CHECK (json_valid(document)),
   document_hash          TEXT NOT NULL,
   activated_at_sequence  INTEGER               -- set via the POLICY_CHANGED event's
@@ -342,6 +389,9 @@ CREATE TABLE proj_cash_position (               -- aggregated across accounts
   entity_id           TEXT NOT NULL,
   currency            TEXT NOT NULL,
   total_minor_units   INTEGER NOT NULL,
+  default_currency    TEXT,
+  default_total_minor_units INTEGER,
+  default_currency_snapshot_id TEXT,
   pending_delta_minor_units INTEGER NOT NULL,   -- pending shown separately (DESIGN.md §2)
   as_of_sequence      INTEGER NOT NULL,
   PRIMARY KEY (entity_id, currency)
@@ -355,6 +405,12 @@ CREATE TABLE proj_transactions (
   direction           TEXT NOT NULL,
   amount_minor_units  INTEGER NOT NULL,
   currency            TEXT NOT NULL,
+  transaction_currency TEXT NOT NULL,
+  exchange_rate       TEXT NOT NULL,
+  local_rate          INTEGER NOT NULL,
+  default_currency    TEXT NOT NULL,
+  default_amount_minor_units INTEGER NOT NULL,
+  default_currency_snapshot_id TEXT NOT NULL,
   occurred_at         TEXT NOT NULL,
   classification      TEXT,
   reconciled          INTEGER NOT NULL DEFAULT 0,
@@ -365,6 +421,9 @@ CREATE INDEX idx_proj_txn_account ON proj_transactions (account_id, occurred_at)
 CREATE TABLE proj_budget_lines (
   budget_id TEXT NOT NULL, category TEXT NOT NULL,
   amount_minor_units INTEGER NOT NULL, currency TEXT NOT NULL,
+  transaction_currency TEXT, exchange_rate TEXT, local_rate INTEGER,
+  default_currency TEXT, default_amount_minor_units INTEGER,
+  default_currency_snapshot_id TEXT,
   status TEXT NOT NULL,
   PRIMARY KEY (budget_id, category)
 ) STRICT, WITHOUT ROWID;
@@ -376,6 +435,12 @@ CREATE TABLE proj_approvals_open (
   account_id      TEXT,
   amount_minor_units INTEGER,
   currency        TEXT,
+  transaction_currency TEXT,
+  exchange_rate   TEXT,
+  local_rate      INTEGER,
+  default_currency TEXT,
+  default_amount_minor_units INTEGER,
+  default_currency_snapshot_id TEXT,
   required_count  INTEGER NOT NULL,
   signature_count INTEGER NOT NULL,
   requested_by    TEXT NOT NULL,

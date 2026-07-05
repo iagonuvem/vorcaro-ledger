@@ -18,6 +18,7 @@ and the schemas in sync (schema hash pinned in the doc header when generated).
 | IDs | ULID strings, prefixed by kind: `evt_`, `exec_`, `dev_`, `acct_`, `txn_`, `bud_`, `fct_`, `apr_`, `vnd_`, `ent_`, `att_`, `ai_`, `cfl_`, `kp_`, `rcv_`, `pol_`. Client-generated where the client creates the object. |
 | Timestamps | ISO 8601 UTC strings (`2026-07-01T14:23:11Z`). `client_*` timestamps are recorded but never trusted for policy; `server_*` timestamps are authoritative. |
 | Money | Always `{ amount_minor_units: bigint; currency: CurrencyCode }`. Integer minor units (cents); **never floats**. `CurrencyCode` is ISO 4217 (`"USD"`, `"EUR"`, …). |
+| Exchange rates | Decimal strings, never floats. Monetary events carry the original `transaction_currency`, immutable `exchange_rate`, `local_rate` in transaction-currency minor units, and the `default_currency_snapshot_id` used for audit. |
 | Hashes | `sha256:<hex>` strings. |
 | Signatures | Ed25519 over RFC 8785 JCS canonical bytes, base64. |
 | Enums | Closed string unions. Clients and server branch on enum values, never on message strings. |
@@ -77,7 +78,11 @@ type PolicyMetadata = {
   counterparty_account_id?: string;
   entity_id?: string;
   amount_minor_units?: bigint;
-  currency?: string;
+  currency?: string;                    // legacy/account currency where needed
+  transaction_currency?: string;        // required when a monetary amount is present
+  exchange_rate?: string;               // decimal string into policy default currency
+  default_currency_snapshot_id?: string;
+  local_rate?: bigint;                  // original value in transaction_currency minor units
 };
 
 // What the client builds and signs.
@@ -104,6 +109,7 @@ type LedgerEvent = ClientEventEnvelope & {
   resulting_ledger_hash: string | null;
   server_signature: string | null;
   status: EventStatus;
+  error_code: ErrorCode | null;    // persisted outcome for idempotent acknowledgements
   server_timestamp: string;        // authoritative for policy and audit
   accepted_at: string | null;
 };
@@ -302,6 +308,7 @@ type ApprovalRule = {
 type PolicyDocument = {
   id: string;
   version: number;
+  default_currency: string;
   permissions: Permission[];
   approval_rules: ApprovalRule[];
   document_hash: string;
