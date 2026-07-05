@@ -74,6 +74,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Added `server/bootstrap.sh`, a root-run first-host bootstrap script that creates the durable data/certificate/secret directories, local CA hierarchy, server certificates, bootstrap client certificates, healthcheck client certificate, server signing key, and initial SQLite files when the built server database module is available.
 - Added `server/setup.sh`, a root-run dependency installer for supported Linux distributions and host-layout preparer for Docker bind mounts, including macOS `/private/var/lib/vorcaro` and `/private/etc/vorcaro`; `bootstrap.sh` invokes it when Node.js, pnpm, OpenSSL, Docker, or Docker Compose v2 is missing.
 - Added `server/README.md` with from-scratch bootstrap, Docker Compose runtime, macOS Docker Desktop bind-mount guidance, local development, environment variable, healthcheck, and common startup failure guidance for the server package.
+- Added `server/docs/HOW_TO_ADD_EXECUTIVE.md` with the current operator procedure for registering a new executive signing public key in the server database and verifying it through the admin API.
 
 ## Verification
 

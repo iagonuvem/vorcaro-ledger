@@ -4,6 +4,10 @@ This package is the Vorcaro finance server. It owns the append-only ledger
 database, rebuildable projections, device mTLS API, admin mTLS API, policy
 activation surface, and the static admin console runtime hook.
 
+Detailed operator guides live in [server/docs](docs).
+Start with [How To Add An Executive Key](docs/HOW_TO_ADD_EXECUTIVE.md)
+when adding an executive signing key to the server.
+
 The normal deployment shape is:
 
 ```text
@@ -328,6 +332,89 @@ VORCARO_HEALTHCHECK_CA_FILE
 VORCARO_HEALTHCHECK_HOST                 default localhost
 ```
 
+## Access The Admin UI
+
+The admin UI is served by the admin mTLS listener:
+
+```text
+https://localhost:9443/
+```
+
+It is not a public HTTPS site. The browser must trust the local Vorcaro root CA
+and present an admin client certificate. A plain request like this is expected
+to fail:
+
+```bash
+curl https://localhost:9443/admin/v1/status
+```
+
+For command-line access, provide both the bootstrap admin client certificate and
+the local root CA:
+
+```bash
+curl --cert /etc/vorcaro/certs/bootstrap-admin-client.cert.pem \
+     --key /etc/vorcaro/certs/bootstrap-admin-client.key.pem \
+     --cacert /etc/vorcaro/certs/root-ca.pem \
+     https://localhost:9443/admin/v1/status
+```
+
+On macOS, use the `/private` paths if needed:
+
+```bash
+curl --cert /private/etc/vorcaro/certs/bootstrap-admin-client.cert.pem \
+     --key /private/etc/vorcaro/certs/bootstrap-admin-client.key.pem \
+     --cacert /private/etc/vorcaro/certs/root-ca.pem \
+     https://localhost:9443/admin/v1/status
+```
+
+For browser access on macOS:
+
+1. Trust the local root CA.
+
+   ```bash
+   sudo security add-trusted-cert \
+     -d \
+     -r trustRoot \
+     -k /Library/Keychains/System.keychain \
+     /private/etc/vorcaro/certs/root-ca.pem
+   ```
+
+2. Convert the bootstrap admin client certificate to PKCS#12 for Keychain
+   import.
+
+   ```bash
+   sudo openssl pkcs12 \
+     -export \
+     -legacy \
+     -in /private/etc/vorcaro/certs/bootstrap-admin-client.cert.pem \
+     -inkey /private/etc/vorcaro/certs/bootstrap-admin-client.key.pem \
+     -certfile /private/etc/vorcaro/certs/admin-client-ca.pem \
+     -out /tmp/vorcaro-admin-client.p12 \
+     -name "Vorcaro Bootstrap Admin"
+
+   sudo chown "$(id -u):$(id -g)" /tmp/vorcaro-admin-client.p12
+   ```
+
+3. Import the PKCS#12 file into Keychain Access.
+
+   ```bash
+   open /tmp/vorcaro-admin-client.p12
+   ```
+
+4. Open the admin UI.
+
+   ```text
+   https://localhost:9443/
+   ```
+
+5. Delete the temporary PKCS#12 file after import.
+
+   ```bash
+   rm /tmp/vorcaro-admin-client.p12
+   ```
+
+When the browser prompts for a certificate, choose `Vorcaro Bootstrap Admin`.
+
 ## Run Locally Without Docker
 
 Local execution is useful for development only. It still needs certificate and
@@ -463,3 +550,25 @@ TLS client authentication failure
 Use a client certificate signed by the correct trust root for the surface:
 device clients must chain to `device-client-ca.pem`; admin clients must chain to
 `admin-client-ca.pem`.
+
+`MAC verification failed during PKCS12 import (wrong password?)`
+
+macOS Keychain can reject modern OpenSSL PKCS#12 defaults and report a wrong
+password even when the password is correct. Recreate the admin client bundle
+with legacy PKCS#12 encryption:
+
+```bash
+rm -f /tmp/vorcaro-admin-client.p12
+
+sudo openssl pkcs12 \
+  -export \
+  -legacy \
+  -in /private/etc/vorcaro/certs/bootstrap-admin-client.cert.pem \
+  -inkey /private/etc/vorcaro/certs/bootstrap-admin-client.key.pem \
+  -certfile /private/etc/vorcaro/certs/admin-client-ca.pem \
+  -out /tmp/vorcaro-admin-client.p12 \
+  -name "Vorcaro Bootstrap Admin"
+
+sudo chown "$(id -u):$(id -g)" /tmp/vorcaro-admin-client.p12
+open /tmp/vorcaro-admin-client.p12
+```
