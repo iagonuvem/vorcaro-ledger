@@ -45,6 +45,26 @@ export {
   type SnapshotObjectStore,
   type SnapshotWorkerOptions
 } from "./snapshots/worker.js";
+export {
+  KmsError,
+  LocalKeyManagementService,
+  type KeyManagementService,
+  type LocalKeyManagementServiceOptions,
+  type RewrapKeyInput,
+  type SignWithKeyInput,
+  type UnwrapKeyInput,
+  type WrapKeyInput
+} from "./kms/service.js";
+export {
+  RecoveryError,
+  RecoveryService,
+  type ApproveRecoveryInput,
+  type ExecuteRecoveryInput,
+  type ExecuteRecoveryResult,
+  type InitiateRecoveryInput,
+  type RecoveryPolicyConfig,
+  type RecoveryServiceOptions
+} from "./recovery/service.js";
 
 export type ServerBootstrapStatus = {
   protocol_event_type_count: number;

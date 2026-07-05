@@ -11,6 +11,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Step 4a, PKI enrollment and revocation baseline (§8): completed for the local executable baseline.
 - Step 5a, Conflict detection and resolution (§9): completed for the initial executable baseline.
 - Step 6a, Snapshots and projections (§10): completed for the initial executable baseline.
+- Step 7a, KMS and recovery ceremony (§11): completed for the local executable baseline.
 - Server app: bootstrapped as the `server` workspace package; device/admin Express apps, mTLS listener factory, PKI service boundary, local CA adapter, enrollment, and revocation-list handling exist. Real `step-ca` deployment wiring remains a later operational integration.
 
 ## Completed
@@ -52,6 +53,11 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Added `MemorySnapshotObjectStore` for local tests; production MinIO wiring can implement the same object-store boundary without changing snapshot manifest semantics.
 - Exported projection and snapshot workers from the server package.
 - Added section §10 tests covering projection idempotency, open-conflict mirroring, conflict-resolution projection cleanup, encrypted snapshot object storage, signed snapshot manifests, content-hash verification, and same-sequence snapshot id uniqueness.
+- Added a handle-based `KeyManagementService` boundary plus `LocalKeyManagementService` for local drills, covering key wrap, unwrap, rewrap, and signing by key handle.
+- Added `RecoveryService` for recovery ceremony initiation, custodian approval verification, threshold transition, target executive/device quarantine, recovery-master rewrap of active key packages, executive key rotation, and signed ledger evidence append for `RECOVERY_PERFORMED` and `KEY_ROTATED`.
+- Added recovery audit evidence for ceremony initiation, approvals, threshold crossing, and execution.
+- Exported KMS and recovery service types/classes from the server package.
+- Added section §11 tests covering KMS wrapping/rewrapping/signing and a full threshold recovery drill with bad-signature rejection, key-package rewrap, old key revocation window, new key activation, signed acknowledgements, append-only ledger evidence, and recovery audit entries.
 
 ## Verification
 
@@ -62,7 +68,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 ## Not Started
 
 - Real `step-ca` client integration and certificate renewal endpoint.
-- Checkpoints worker, production MinIO adapter, KMS-wrapped snapshot/database keys, recovery, full policy engine, broader finance projection event coverage, reporting APIs, admin console implementation, and server-side AI workers.
+- Checkpoints worker, production PKCS#11 adapter, production MinIO adapter, KMS-wrapped snapshot/database keys, recovery/admin API wiring, full policy engine, broader finance projection event coverage, reporting APIs, admin console implementation, and server-side AI workers.
 
 ## Notes
 
@@ -75,3 +81,6 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - The §9 implementation blocks all new ledger writes to a conflicted object until `CONFLICT_RESOLVED` lands. The later full policy engine can narrow this to the plan's material-action rule when read/annotation event types exist.
 - The §10 snapshot worker currently accepts a 32-byte snapshot encryption key directly. Later KMS work must unwrap/provide that key from the HSM boundary; snapshot bodies are already encrypted before leaving process memory for object storage.
 - The §10 projection worker covers account, cash-position, and conflict read models needed by the current implemented event surface. Transaction, budget, approval, and richer account fields should be filled when the corresponding decrypted payload schemas and policy/KMS path exist.
+- The §11 KMS implementation is local/test-only. Production must implement the same `KeyManagementService` interface against PKCS#11/SoftHSM or hardware HSM handles.
+- The §11 recovery service requires real client-signed `RECOVERY_PERFORMED` and `KEY_ROTATED` envelopes from the executing recovery officer device before it appends recovery evidence. Network route wiring remains with the admin/recovery API work.
+- Existing appender, PKI, and snapshot services still accept direct server signing/encryption key material from earlier steps; production HSM retrofit should move those call sites onto the KMS handle boundary introduced in §11.
