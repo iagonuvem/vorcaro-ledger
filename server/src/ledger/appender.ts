@@ -98,6 +98,10 @@ export class LedgerAppender {
     return work;
   }
 
+  async drain(): Promise<void> {
+    await this.tail;
+  }
+
   async appendBatch(requests: readonly AppendEventRequest[]): Promise<ServerAck[]> {
     const ordered = [...requests].sort((left, right) => {
       const deviceOrder = left.event.device_id.localeCompare(right.event.device_id);

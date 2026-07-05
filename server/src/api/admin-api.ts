@@ -80,6 +80,11 @@ type AuditRow = {
   readonly created_at: string;
 };
 
+type StatusHeadRow = {
+  readonly server_sequence: number;
+  readonly resulting_ledger_hash: string;
+};
+
 const revokeDeviceBodySchema = z
   .object({
     revoked_by: z.string().min(1).default("admin"),
@@ -121,6 +126,19 @@ export function createAdminApiApp(options: AdminApiOptions = {}): express.Expres
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb", strict: true }));
+
+  app.get("/admin/v1/status", (_request, response) => {
+    if (options.database === undefined) {
+      sendJson(response, 501, { error_code: "POLICY_DENIED" });
+      return;
+    }
+
+    sendJson(response, 200, {
+      status: "accepted",
+      database_open: true,
+      chain_head: readStatusHead(options.database)
+    });
+  });
 
   app.get("/admin/v1/devices", (_request, response) => {
     if (options.database === undefined) {
@@ -413,4 +431,26 @@ function readAudit(database: DatabaseSync) {
     ...row,
     detail: JSON.parse(row.detail) as Record<string, unknown>
   }));
+}
+
+function readStatusHead(database: DatabaseSync) {
+  const row = database
+    .prepare(
+      `SELECT server_sequence, resulting_ledger_hash
+      FROM ledger_events
+      WHERE server_sequence IS NOT NULL
+      ORDER BY server_sequence DESC
+      LIMIT 1`
+    )
+    .get() as StatusHeadRow | undefined;
+
+  return row === undefined
+    ? {
+        latest_sequence: 0n,
+        latest_ledger_hash: null
+      }
+    : {
+        latest_sequence: BigInt(row.server_sequence),
+        latest_ledger_hash: row.resulting_ledger_hash
+      };
 }

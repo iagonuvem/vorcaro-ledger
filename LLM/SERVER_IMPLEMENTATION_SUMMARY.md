@@ -13,6 +13,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Step 6a, Snapshots and projections (§10): completed for the initial executable baseline.
 - Step 7a, KMS and recovery ceremony (§11): completed for the local executable baseline.
 - Step 8a, Policy engine and admin console (§12): completed for the local executable baseline.
+- Step 9a, Containerized deployment (§14.1): completed for the local executable baseline.
 - Server app: bootstrapped as the `server` workspace package; device/admin Express apps, mTLS listener factory, PKI service boundary, local CA adapter, enrollment, and revocation-list handling exist. Real `step-ca` deployment wiring remains a later operational integration.
 
 ## Completed
@@ -65,6 +66,14 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Expanded the admin API with read surfaces for devices, executives, recovery ceremonies, conflicts, checkpoints, audit log, and policies, plus signed-action hooks for policy activation and recovery ceremonies.
 - Added the dependency-free internal `admin-ui/` console using the `DESIGN.md` dark, quiet, typographic system with semantic status treatment and compact tables for devices, executives, recovery, conflicts, checkpoints, audit, and policies.
 - Added section §12 tests covering policy allow/deny/approval decisions, signed policy activation, policy hash rejection, and appender policy enforcement.
+- Added a production runtime entrypoint (`server/src/main.ts`) that opens host-mounted SQLite databases, acquires an atomic data-directory lock, wires the appender/policy/admin/device services, starts the two TLS 1.3 mTLS listeners, serves the static admin console, and gracefully drains/checkpoints on shutdown.
+- Added a container healthcheck command (`server/src/healthcheck.ts`) with mTLS endpoint checking when healthcheck client certs are configured and filesystem readiness fallback for local containers.
+- Added `Dockerfile`, `.dockerignore`, and `docker-compose.yml` with a non-root runtime user, read-only root filesystem, `/var/lib/vorcaro` data mount, certificate/secret mounts, published `8443`/`9443` listeners, and optional `step-ca`/MinIO profiles.
+- Added `LLM/DOCKER_OPERATIONS.md` with host path layout, expected certificate/secret files, run commands, and safety rules.
+- Added `server` start script for `node dist/main.js`; verified the Dockerfile's `pnpm deploy --prod --legacy` packaging command.
+- Added `server/bootstrap.sh`, a root-run first-host bootstrap script that creates the durable data/certificate/secret directories, local CA hierarchy, server certificates, bootstrap client certificates, healthcheck client certificate, server signing key, and initial SQLite files when the built server database module is available.
+- Added `server/setup.sh`, a root-run dependency installer for supported Linux distributions and host-layout preparer for Docker bind mounts, including macOS `/private/var/lib/vorcaro` and `/private/etc/vorcaro`; `bootstrap.sh` invokes it when Node.js, pnpm, OpenSSL, Docker, or Docker Compose v2 is missing.
+- Added `server/README.md` with from-scratch bootstrap, Docker Compose runtime, macOS Docker Desktop bind-mount guidance, local development, environment variable, healthcheck, and common startup failure guidance for the server package.
 
 ## Verification
 
@@ -75,7 +84,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 ## Not Started
 
 - Real `step-ca` client integration and certificate renewal endpoint.
-- Checkpoints worker, production PKCS#11 adapter, production MinIO adapter, KMS-wrapped snapshot/database keys, hardened admin identity/authorization middleware, broader finance projection event coverage, reporting APIs beyond the admin read surfaces, production React build tooling for the admin console, and server-side AI workers.
+- Checkpoints worker, production PKCS#11 adapter, production MinIO adapter, KMS-wrapped snapshot/database keys, hardened admin identity/authorization middleware, broader finance projection event coverage, reporting APIs beyond the admin read surfaces, production React build tooling for the admin console, signed internal registry publishing, backup jobs, observability, ASVS mapping, and server-side AI workers.
 
 ## Notes
 
@@ -94,3 +103,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - The §12 policy interpreter is intentionally not a general-purpose language. Add new condition operators only by extending the closed `PolicyEngine.conditionsAllow` implementation and tests.
 - The §12 admin console is static and dependency-free in this baseline to avoid introducing frontend supply-chain dependencies. The admin listener can serve it via `adminUiPath`; production can add React build tooling later while preserving the API and visual system.
 - The §12 admin API still relies on the admin listener's mTLS boundary. Fine-grained admin identity binding/role authorization should be added before exposing mutation endpoints beyond controlled local drills.
+- The §14.1 runtime requires mounted TLS certs and a server signing key file. It intentionally does not generate development secrets or self-signed certificates at boot.
+- The §14.1 lock uses an atomic lock directory under `VORCARO_DATA_DIR`; it makes double-starts against the same mount fail loudly.
+- The §14.1 Dockerfile packaging path was verified with `pnpm --filter @vorcaro/server deploy --prod --legacy`; a full Docker image build was not run in this sandbox.
+- The §14.1 `server/bootstrap.sh` bootstrap preserves existing keys, certificates, and signing material by default; `VORCARO_FORCE=1` intentionally regenerates them and should not be used against an established ledger without an operator recovery plan.
