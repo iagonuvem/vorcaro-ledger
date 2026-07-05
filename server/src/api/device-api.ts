@@ -16,6 +16,7 @@ import type { LedgerAppender } from "../ledger/appender.js";
 import { GENESIS_LEDGER_HASH } from "../ledger/appender.js";
 import { ApiError } from "./errors.js";
 import { PkiError, type PkiService } from "../pki/enrollment.js";
+import { PolicyError } from "../policy/engine.js";
 import {
   createIdentityMiddleware,
   requireIdentity,
@@ -279,6 +280,11 @@ export function createErrorHandler(): ErrorRequestHandler {
     }
 
     if (error instanceof PkiError) {
+      sendJson(response, ApiError.errorStatus(error.errorCode), { error_code: error.errorCode });
+      return;
+    }
+
+    if (error instanceof PolicyError) {
       sendJson(response, ApiError.errorStatus(error.errorCode), { error_code: error.errorCode });
       return;
     }

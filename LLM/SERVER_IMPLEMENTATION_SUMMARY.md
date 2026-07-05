@@ -12,6 +12,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Step 5a, Conflict detection and resolution (§9): completed for the initial executable baseline.
 - Step 6a, Snapshots and projections (§10): completed for the initial executable baseline.
 - Step 7a, KMS and recovery ceremony (§11): completed for the local executable baseline.
+- Step 8a, Policy engine and admin console (§12): completed for the local executable baseline.
 - Server app: bootstrapped as the `server` workspace package; device/admin Express apps, mTLS listener factory, PKI service boundary, local CA adapter, enrollment, and revocation-list handling exist. Real `step-ca` deployment wiring remains a later operational integration.
 
 ## Completed
@@ -58,6 +59,12 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - Added recovery audit evidence for ceremony initiation, approvals, threshold crossing, and execution.
 - Exported KMS and recovery service types/classes from the server package.
 - Added section §11 tests covering KMS wrapping/rewrapping/signing and a full threshold recovery drill with bad-signature rejection, key-package rewrap, old key revocation window, new key activation, signed acknowledgements, append-only ledger evidence, and recovery audit entries.
+- Added `PolicyEngine`, a deliberately small pure interpreter for versioned policy documents: role/object/action permissions, a closed condition set, and threshold approval rules.
+- Added `PolicyService`, which activates a policy only after a signed `POLICY_CHANGED` event is accepted by `LedgerAppender`, then stores the active document and writes admin audit evidence.
+- Wired `LedgerAppender` to evaluate the active policy after signature/payload validation and before conflict handling, appending denied events as `POLICY_DENIED` and approval-required events as `pending` with `APPROVALS_REQUIRED`.
+- Expanded the admin API with read surfaces for devices, executives, recovery ceremonies, conflicts, checkpoints, audit log, and policies, plus signed-action hooks for policy activation and recovery ceremonies.
+- Added the dependency-free internal `admin-ui/` console using the `DESIGN.md` dark, quiet, typographic system with semantic status treatment and compact tables for devices, executives, recovery, conflicts, checkpoints, audit, and policies.
+- Added section §12 tests covering policy allow/deny/approval decisions, signed policy activation, policy hash rejection, and appender policy enforcement.
 
 ## Verification
 
@@ -68,7 +75,7 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 ## Not Started
 
 - Real `step-ca` client integration and certificate renewal endpoint.
-- Checkpoints worker, production PKCS#11 adapter, production MinIO adapter, KMS-wrapped snapshot/database keys, recovery/admin API wiring, full policy engine, broader finance projection event coverage, reporting APIs, admin console implementation, and server-side AI workers.
+- Checkpoints worker, production PKCS#11 adapter, production MinIO adapter, KMS-wrapped snapshot/database keys, hardened admin identity/authorization middleware, broader finance projection event coverage, reporting APIs beyond the admin read surfaces, production React build tooling for the admin console, and server-side AI workers.
 
 ## Notes
 
@@ -84,3 +91,6 @@ Checkpoint for future agents implementing `LLM/SERVER_IMPLEMENTATION_PLAN.md` in
 - The §11 KMS implementation is local/test-only. Production must implement the same `KeyManagementService` interface against PKCS#11/SoftHSM or hardware HSM handles.
 - The §11 recovery service requires real client-signed `RECOVERY_PERFORMED` and `KEY_ROTATED` envelopes from the executing recovery officer device before it appends recovery evidence. Network route wiring remains with the admin/recovery API work.
 - Existing appender, PKI, and snapshot services still accept direct server signing/encryption key material from earlier steps; production HSM retrofit should move those call sites onto the KMS handle boundary introduced in §11.
+- The §12 policy interpreter is intentionally not a general-purpose language. Add new condition operators only by extending the closed `PolicyEngine.conditionsAllow` implementation and tests.
+- The §12 admin console is static and dependency-free in this baseline to avoid introducing frontend supply-chain dependencies. The admin listener can serve it via `adminUiPath`; production can add React build tooling later while preserving the API and visual system.
+- The §12 admin API still relies on the admin listener's mTLS boundary. Fine-grained admin identity binding/role authorization should be added before exposing mutation endpoints beyond controlled local drills.

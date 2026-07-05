@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vorcaro Admin Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell" aria-live="polite">
+      <header class="topbar">
+        <div>
+          <p class="caption">Vorcaro Ledger</p>
+          <h1>Admin Console</h1>
+        </div>
+        <div class="verified"><span class="dot accepted"></span><span>accepted</span></div>
+      </header>
+
+      <section class="metrics" aria-label="Current server state">
+        <article class="metric">
+          <span class="label">Devices</span>
+          <strong id="metric-devices">0</strong>
+          <span class="sub" id="metric-quarantined">0 quarantined</span>
+        </article>
+        <article class="metric">
+          <span class="label">Conflicts</span>
+          <strong id="metric-conflicts">0</strong>
+          <span class="sub">open or resolved</span>
+        </article>
+        <article class="metric">
+          <span class="label">Policy</span>
+          <strong id="metric-policy">none</strong>
+          <span class="sub" id="metric-policy-hash">no active hash</span>
+        </article>
+        <article class="metric">
+          <span class="label">Checkpoint</span>
+          <strong id="metric-checkpoint">0</strong>
+          <span class="sub" id="metric-checkpoint-hash">no anchor</span>
+        </article>
+      </section>
+
+      <nav class="tabs" aria-label="Admin sections">
+        <button class="tab active" data-tab="devices" type="button">Devices</button>
+        <button class="tab" data-tab="executives" type="button">Executives</button>
+        <button class="tab" data-tab="recovery" type="button">Recovery</button>
+        <button class="tab" data-tab="conflicts" type="button">Conflicts</button>
+        <button class="tab" data-tab="checkpoints" type="button">Checkpoints</button>
+        <button class="tab" data-tab="audit" type="button">Audit</button>
+        <button class="tab" data-tab="policies" type="button">Policies</button>
+      </nav>
+
+      <section class="panel active" data-panel="devices">
+        <div class="panel-title"><h2>Devices</h2><span class="status pending">pending</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Device</th><th>Executive</th><th>Status</th><th>Risk</th><th>Counter</th></tr></thead>
+            <tbody id="devices-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="executives">
+        <div class="panel-title"><h2>Executives</h2><span class="status accepted">accepted</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Executive</th><th>Role</th><th>Status</th><th>Key version</th><th>Created</th></tr></thead>
+            <tbody id="executives-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="recovery">
+        <div class="panel-title"><h2>Recovery Ceremonies</h2><span class="status quarantined">quarantined</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Ceremony</th><th>Executive</th><th>Status</th><th>Approvals</th><th>Created</th></tr></thead>
+            <tbody id="recovery-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="conflicts">
+        <div class="panel-title"><h2>Conflicts</h2><span class="status conflicted">conflicted</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Object</th><th>Status</th><th>Events</th><th>Detected</th><th>Resolved</th></tr></thead>
+            <tbody id="conflicts-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="checkpoints">
+        <div class="panel-title"><h2>Checkpoints</h2><span class="status accepted">accepted</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Sequence</th><th>Ledger hash</th><th>Key</th><th>Issued</th></tr></thead>
+            <tbody id="checkpoints-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="audit">
+        <div class="panel-title"><h2>Audit</h2><span class="status accepted">accepted</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Id</th><th>Category</th><th>Actor</th><th>Detail</th><th>Created</th></tr></thead>
+            <tbody id="audit-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="policies">
+        <div class="panel-title"><h2>Policies</h2><span class="status pending">pending</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Policy</th><th>Version</th><th>Hash</th><th>Sequence</th></tr></thead>
+            <tbody id="policies-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

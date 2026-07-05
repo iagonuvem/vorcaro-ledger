@@ -14,6 +14,8 @@ import {
   type ServerAck,
 } from "@vorcaro/protocol";
 
+import { PolicyEngine } from "../policy/engine.js";
+
 export const GENESIS_LEDGER_HASH = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
 export type AppendEventRequest = {
@@ -32,7 +34,9 @@ type DeviceExecutiveRow = {
   readonly certificate_fingerprint: string;
   readonly executive_id: string;
   readonly executive_status: string;
+  readonly executive_role: string;
   readonly max_event_counter: number;
+  readonly risk_score: number;
 };
 
 type ExistingEventRow = {
@@ -154,6 +158,19 @@ export class LedgerAppender {
       return this.appendRejectedEvent(event, "BAD_PAYLOAD_HASH");
     }
 
+    const policyDecision = PolicyEngine.evaluateActivePolicy(this.database, event, {
+      actorRole: device.executive_role,
+      riskScore: device.risk_score
+    });
+
+    if (policyDecision.outcome === "deny") {
+      return this.appendRejectedEvent(event, policyDecision.errorCode);
+    }
+
+    if (policyDecision.outcome === "require_approvals") {
+      return this.appendValidatedEvent(event, "pending", policyDecision.errorCode);
+    }
+
     const objectHead = this.findObjectHead(event.object_type, event.object_id);
 
     if (event.event_type === "CONFLICT_RESOLVED") {
@@ -254,6 +271,8 @@ export class LedgerAppender {
           devices.certificate_fingerprint,
           devices.executive_id,
           devices.max_event_counter,
+          devices.risk_score,
+          executives.role AS executive_role,
           executives.status AS executive_status
         FROM devices
         JOIN executives ON executives.id = devices.executive_id

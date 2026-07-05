@@ -65,6 +65,20 @@ export {
   type RecoveryPolicyConfig,
   type RecoveryServiceOptions
 } from "./recovery/service.js";
+export {
+  PolicyEngine,
+  PolicyError,
+  type PolicyAction,
+  type PolicyDecision,
+  type PolicyEvaluationContext
+} from "./policy/engine.js";
+export {
+  PolicyService,
+  type ActivatePolicyInput,
+  type ActivatePolicyResult,
+  type PolicyServiceOptions,
+  type PolicySummary
+} from "./policy/service.js";
 
 export type ServerBootstrapStatus = {
   protocol_event_type_count: number;
