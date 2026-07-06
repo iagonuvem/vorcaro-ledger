@@ -1,0 +1,36 @@
+{
+  "name": "@vorcaro/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hardened Electron client for the Vorcaro Sovereign Finance Ledger.",
+  "license": "GPL-3.0-only",
+  "main": "./dist/main/main/main.js",
+  "scripts": {
+    "build": "pnpm run build:renderer && pnpm run build:main",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "dev": "pnpm run build && electron ./dist/main/main/main.js",
+    "fuses:apply": "node scripts/apply-fuses.mjs",
+    "lint": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "test": "pnpm run build && node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@vorcaro/protocol": "workspace:*",
+    "better-sqlite3-multiple-ciphers": "^12.11.1",
+    "electron": "^37.2.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "sodium-native": "^4.3.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@electron/fuses": "^1.8.0",
+    "@types/node": "^24.0.10",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.0"
+  }
+}
